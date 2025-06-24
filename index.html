@@ -72,7 +72,7 @@
     <div id="resultsModal" class="modal-overlay">
         <div class="modal-content">
             <button class="modal-close-button" onclick="hideResultsModal()">&times;</button>
-            <h3>Pay Calculation Breakdown</h3>
+            <h3 id="modalTitle">Pay Calculation Breakdown</h3>
             <div id="resultsOutput">
                 <p>Paste roster data to begin calculation.</p>
             </div>
@@ -417,11 +417,16 @@
         function updateModalContent() {
              const res = calculationResults;
              const resultsOutput = document.getElementById('resultsOutput');
+             const modalTitle = document.getElementById('modalTitle');
+
              if (!res.basePay) {
                  resultsOutput.innerHTML = '<p>Could not calculate. Please check data.</p>';
+                 modalTitle.textContent = 'Pay Calculation Breakdown';
                  return;
              }
              
+             modalTitle.textContent = `Pay Calculation Breakdown - ${res.rank}`;
+
              const littlePayAllowances = res.allowances.fortnight1.odta + res.allowances.fortnight1.ddo + res.allowances.fortnight1.bneo;
              const littlePay = (res.basePay / 2) + littlePayAllowances;
 
@@ -453,7 +458,6 @@
                     </div>
                 </div>
                 <hr>
-                <p><strong>Rank Detected:</strong> ${res.rank}</p>
                 <p><strong>Roster Period Type:</strong> <span style="font-weight: bold; color: ${res.periodType === 'Peak' ? '#C2410C' : '#16A34A'};">${res.periodType}</span></p>
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
                 <p><strong>Superannuation Contribution:</strong> $${res.superContribution.toFixed(2)}</p>
