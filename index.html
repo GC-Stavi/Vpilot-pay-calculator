@@ -8,7 +8,7 @@
         /* All CSS from the original skeleton remains the same */
         body { font-family: 'Inter', sans-serif; margin: 0; background: linear-gradient(to bottom right, #f0f4f8, #e0e7ee); color: #334155; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
         .container { max-width: 1000px; width: 95%; margin: 1rem auto; background: #ffffff; padding: 2em; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); border-radius: 12px; }
-        textarea { width: 100%; height: 250px; font-family: monospace; padding: 1em; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font-size: 14px; margin-bottom: 1.5em; }
+        textarea { width: 100%; height: 250px; font-family: monospace; padding: 1em; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font-size: 14px; margin-bottom: 1em; }
         button { padding: 0.8em 1.6em; font-size: 1em; font-weight: 600; cursor: pointer; border-radius: 8px; border: 1px solid #cbd5e1; background: #e2e8f0; color: #475569; transition: all 0.2s ease; }
         button.primary-button { background: linear-gradient(to right, #6366f1, #8b5cf6); border-color: #6366f1; color: #ffffff; }
         
@@ -31,7 +31,21 @@
         }
         .modal-content h3 { margin-top: 0; }
         .modal-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1em 0; }
-        .total-pay { font-weight: bold; font-size: 1.1em; color: #1e293b; }
+        .total-pay { font-weight: bold; font-size: 1.2em; color: #1e293b; background-color: #f0f4f8; padding: 0.5em; border-radius: 8px; text-align: center; }
+        .pay-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;}
+        .pay-fortnight { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; }
+        .pay-fortnight h4 { margin-top: 0; }
+        
+        /* Number input for infringements */
+        .infringement-control { display: flex; align-items: center; gap: 10px; }
+        .infringement-control input[type="number"] {
+            width: 60px;
+            padding: 0.5em;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1em;
+        }
     </style>
 </head>
 <body>
@@ -40,9 +54,14 @@
         <!-- The user will paste the full roster table text here -->
         <textarea id="rosterInput" placeholder="Paste your full roster table text here..." oninput="runPayCalculation()"></textarea>
         
-        <!-- This button will now show the modal with the pre-calculated results -->
-        <button onclick="showResultsModal()" class="primary-button">View Pay Breakdown</button>
-
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+             <div class="infringement-control">
+                <label for="infringementInput">DDO Infringements:</label>
+                <input type="number" id="infringementInput" value="0" min="0" onchange="runPayCalculation()">
+             </div>
+            <!-- This button will now show the modal with the pre-calculated results -->
+            <button onclick="showResultsModal()" class="primary-button">View Pay Breakdown</button>
+        </div>
     </main>
     
     <!-- Modal for displaying results -->
@@ -59,45 +78,34 @@
     
     <script>
         // --- DATA & EBA RULES ---
-
         const ROSTER_PERIODS = [
-            { start: '2024-12-23', end: '2025-01-19', type: 'Peak' },
-            { start: '2025-01-20', end: '2025-02-16', type: 'Off-Peak' },
-            { start: '2025-02-17', end: '2025-03-16', type: 'Off-Peak' },
-            { start: '2025-03-17', end: '2025-04-13', type: 'Peak' },
-            { start: '2025-04-14', end: '2025-05-11', type: 'Peak' },
-            { start: '2025-05-12', end: '2025-06-08', type: 'Off-Peak' },
-            { start: '2025-06-09', end: '2025-07-06', type: 'Peak' },
-            { start: '2025-07-07', end: '2025-08-03', type: 'Peak' },
+            { start: '2024-12-23', end: '2025-01-19', type: 'Peak' }, { start: '2025-01-20', end: '2025-02-16', type: 'Off-Peak' },
+            { start: '2025-02-17', end: '2025-03-16', type: 'Off-Peak' }, { start: '2025-03-17', end: '2025-04-13', type: 'Peak' },
+            { start: '2025-04-14', end: '2025-05-11', type: 'Peak' }, { start: '2025-05-12', end: '2025-06-08', type: 'Off-Peak' },
+            { start: '2025-06-09', end: '2025-07-06', type: 'Peak' }, { start: '2025-07-07', end: '2025-08-03', type: 'Peak' },
         ];
-
         const EBA_CONSTANTS = {
             ANNUAL_SALARIES: { 'First Officer': 183137.50, 'Captain': 281750.00 },
             ROSTER_PERIOD_DAYS: 28,
             CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
             VLEARN_CREDIT: 0.75,
-            ODTA_HOURLY_RATE: 8.95, // Clause 45.2
-            PRODUCTIVITY_RATES: { 'First Officer': 236.93 }, // Clause 30.1, Table 5
-            CANCELLED_ACCOM_ALLOWANCE: 82.40, // Clause 32.1, Table 6
-            DDO_WORKED_MINIMUM_HOURS: 5, // Clause 37.2(a)
+            ODTA_HOURLY_RATE: 8.95,
+            PRODUCTIVITY_RATES: { 'First Officer': 236.93 },
+            CANCELLED_ACCOM_ALLOWANCE: 82.40,
+            DDO_WORKED_MINIMUM_HOURS: 5,
+            DDO_INFRINGEMENT_HOURS: 5 // Assumption: A standard infringement pays 5 hours. Clause 37.4
         };
-        
         let calculationResults = {};
 
-        // --- MODAL VISIBILITY FUNCTIONS ---
+        // --- UI & HELPER FUNCTIONS ---
         function showResultsModal() {
             if (Object.keys(calculationResults).length === 0) {
-                alert("Please paste valid roster data first to run the calculation.");
+                alert("Please paste valid roster data first.");
                 return;
             }
             document.getElementById('resultsModal').style.display = 'flex';
         }
-
-        function hideResultsModal() {
-            document.getElementById('resultsModal').style.display = 'none';
-        }
-        
-        // --- HELPER FUNCTIONS ---
+        function hideResultsModal() { document.getElementById('resultsModal').style.display = 'none'; }
         const parseDateFromRoster = (dateStr) => {
             if (!dateStr || dateStr.length < 7) return null;
             const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
@@ -106,7 +114,6 @@
             const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
             return new Date(Date.UTC(year, month, day));
         };
-
         const getDateTime = (dateStr, timeStr) => {
             const date = parseDateFromRoster(dateStr);
             if (date && timeStr && timeStr.includes(':')) {
@@ -115,15 +122,13 @@
             }
             return date;
         };
-        
         const parseTimeToHours = (timeStr) => {
             if (!timeStr || !timeStr.includes(':')) return 0;
             const [hours, minutes] = timeStr.split(':').map(Number);
             return hours + (minutes / 60);
         };
 
-        // --- CALCULATION FUNCTIONS ---
-
+        // --- CORE CALCULATION FUNCTIONS ---
         function getPeriodTypeAndTrigger(rosterStartDateStr) {
             const rosterStartDate = parseDateFromRoster(rosterStartDateStr);
             if (!rosterStartDate) return null;
@@ -136,151 +141,76 @@
             }
             return null;
         }
-        
         function calculateBasePayForPeriod(rank) {
             const annualSalary = EBA_CONSTANTS.ANNUAL_SALARIES[rank];
             if (!annualSalary) return 0;
             const dailyRate = annualSalary / 365;
             return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
-        
         function calculateTotalCreditHours(dataLines) {
             let totalFlightHours = 0;
-            const fltTimeIndex = 13; 
+            const fltTimeIndex = 13;
             for (const line of dataLines) {
                 const columns = line.split('|').map(c => c.trim());
-                if (columns.length <= fltTimeIndex) continue;
-                const timeStr = columns[fltTimeIndex];
-                totalFlightHours += parseTimeToHours(timeStr);
+                if (columns.length > fltTimeIndex) {
+                    totalFlightHours += parseTimeToHours(columns[fltTimeIndex]);
+                }
             }
             return totalFlightHours + EBA_CONSTANTS.VLEARN_CREDIT;
         }
 
-        function calculateOdta(dataLines) {
-            let totalOdtaPay = 0;
-            let tripActive = false;
-            let tripStartDetails = null;
-        
-            const dateIndex = 1;
-            const rptIndex = 8;
-            const signOffIndex = 11;
-            const hotelIndex = 14;
-        
-            for (let i = 0; i < dataLines.length; i++) {
-                const columns = dataLines[i].split('|').map(c => c.trim());
-                let currentDate = columns[dateIndex];
-        
-                // If the date column is blank, use the date from the previous row
-                if (!currentDate) {
-                    let prevIndex = i - 1;
-                    while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[dateIndex].trim()) {
-                        prevIndex--;
-                    }
-                    if (prevIndex >= 0) {
-                        currentDate = dataLines[prevIndex].split('|')[dateIndex].trim();
-                    }
-                }
-        
-                const hasOvernight = columns.length > hotelIndex && columns[hotelIndex].trim() !== '';
-        
-                if (!tripActive && hasOvernight) {
-                    tripActive = true;
-                    tripStartDetails = {
-                        date: currentDate,
-                        time: columns[rptIndex]
-                    };
-                }
-        
-                if (tripActive) {
-                    const isLastDayOfTrip = (i + 1 === dataLines.length) || (dataLines[i + 1].split('|')[hotelIndex].trim() === '');
-                    if (isLastDayOfTrip) {
-                        tripActive = false;
-                        const tripEndTime = columns[signOffIndex];
-                        if (tripStartDetails && tripEndTime) {
-                            const startDateTime = getDateTime(tripStartDetails.date, tripStartDetails.time);
-                            const endDateTime = getDateTime(currentDate, tripEndTime);
-                            if (startDateTime && endDateTime && endDateTime > startDateTime) {
-                                const durationMs = endDateTime - startDateTime;
-                                const durationHours = durationMs / (1000 * 60 * 60);
-                                totalOdtaPay += durationHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
-                            }
-                        }
-                        tripStartDetails = null;
-                    }
-                }
-            }
-            return totalOdtaPay;
-        }
-        
         /**
-         * Calculates special allowances like DDO Worked Pay and Cancelled Accom.
-         * @param {string[]} dataLines - An array of strings representing roster data.
-         * @param {string} rank - The rank of the pilot.
-         * @returns {object} An object with `ddoPay` and `cancelledAccomPay`.
+         * Calculates allowances and splits them by fortnight.
          */
-        function calculateSpecialAllowances(dataLines, rank) {
-            let ddoPay = 0;
-            let cancelledAccomPay = 0;
-
-            const dutyIndex = 6;
-            const hotelIndex = 14;
-            const fltTimeIndex = 13;
-            
+        function calculateAllowancesByFortnight(dataLines, rank, rosterStartDate) {
+            let allowances = {
+                fortnight1: { odta: 0, ddo: 0, bneo: 0 },
+                fortnight2: { odta: 0, ddo: 0, bneo: 0 }
+            };
             const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+            const fortnightEndDate = new Date(rosterStartDate);
+            fortnightEndDate.setDate(fortnightEndDate.getDate() + 13); // First 14 days
 
-            // Calculate BNEO allowance
-            for (const line of dataLines) {
+            // Helper to get full date for any roster line
+            const getLineDate = (lineIndex) => {
+                let dateStr = dataLines[lineIndex].split('|')[1].trim();
+                if (dateStr) return parseDateFromRoster(dateStr);
+                let prevIndex = lineIndex - 1;
+                while (prevIndex >= 0) {
+                    dateStr = dataLines[prevIndex].split('|')[1].trim();
+                    if (dateStr) return parseDateFromRoster(dateStr);
+                    prevIndex--;
+                }
+                return null;
+            };
+
+            // DDO and BNEO allowances
+            dataLines.forEach((line, i) => {
                 const columns = line.split('|').map(c => c.trim());
-                if (columns.length > hotelIndex && columns[hotelIndex].toUpperCase() === 'BNEO') {
-                    cancelledAccomPay += EBA_CONSTANTS.CANCELLED_ACCOM_ALLOWANCE;
+                const lineDate = getLineDate(i);
+                if (!lineDate) return;
+                const fortnight = (lineDate <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
+
+                if (columns.length > 14 && columns[14].toUpperCase() === 'BNEO') {
+                    allowances[fortnight].bneo += EBA_CONSTANTS.CANCELLED_ACCOM_ALLOWANCE;
                 }
-            }
-
-            // Calculate DDO Worked Pay
-            const ddoDays = new Set(); // Use a Set to only process each DDO day once
-            for(const line of dataLines) {
-                 const columns = line.split('|').map(c => c.trim());
-                 if (columns.length > dutyIndex && columns[dutyIndex].startsWith('$')) {
-                     // Get the date for this line, carrying it down from previous rows if blank
-                    let dateForLine = columns[1].trim();
-                    if (!dateForLine) {
-                        let prevIndex = dataLines.indexOf(line) - 1;
-                        while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[1].trim()) {
-                            prevIndex--;
-                        }
-                         if(prevIndex >= 0) dateForLine = dataLines[prevIndex].split('|')[1].trim();
-                    }
-                    if (dateForLine) ddoDays.add(dateForLine);
-                 }
-            }
-
-            // Now calculate payment for each unique DDO day
-            ddoDays.forEach(day => {
-                let dailyFlightHours = 0;
-                for(const line of dataLines) {
-                    const columns = line.split('|').map(c => c.trim());
-                    // Find the date for the current row
-                    let dateForLine = columns[1].trim();
-                     if (!dateForLine) {
-                        let prevIndex = dataLines.indexOf(line) - 1;
-                        while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[1].trim()) {
-                            prevIndex--;
-                        }
-                         if(prevIndex >= 0) dateForLine = dataLines[prevIndex].split('|')[1].trim();
-                    }
-
-                    if (dateForLine === day) {
-                         const timeStr = columns[fltTimeIndex];
-                         dailyFlightHours += parseTimeToHours(timeStr);
+                
+                if (columns.length > 6 && columns[6].startsWith('$')) {
+                    const dailyFlightHours = parseTimeToHours(columns[13]);
+                    // Only pay if there was actual duty associated with the nomination
+                    if(dailyFlightHours > 0) {
+                         const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
+                         allowances[fortnight].ddo += payableHours * productivityRate;
                     }
                 }
-
-                const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
-                ddoPay += payableHours * productivityRate;
             });
 
+            // ODTA (Placeholder - to be revisited with more robust logic)
+            const totalOdtaPay = 0; 
+            allowances.fortnight1.odta = totalOdtaPay / 2;
+            allowances.fortnight2.odta = totalOdtaPay / 2;
 
-            return { ddoPay, cancelledAccomPay };
+            return allowances;
         }
 
         /**
@@ -301,33 +231,41 @@
             const dataLines = allLines.filter(line => line.trim().startsWith('|') && !line.includes('---') && !line.includes('Start Date'));
             
             if (dataLines.length === 0) {
-                resultsOutput.innerHTML = '<p>Error: No valid data rows found in the pasted text.</p>';
+                resultsOutput.innerHTML = '<p>Error: No valid data rows found.</p>';
                 return;
             }
             
-            const rosterStartDate = dataLines[0].split('|')[1].trim();
-            const periodInfo = getPeriodTypeAndTrigger(rosterStartDate);
+            const rosterStartDateStr = dataLines[0].split('|')[1].trim();
+            const periodInfo = getPeriodTypeAndTrigger(rosterStartDateStr);
 
             if (!periodInfo) {
-                resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDate}.</p>`;
-                alert(`Error: The roster start date (${rosterStartDate}) is outside known date ranges.`);
+                resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDateStr}.</p>`;
                 return;
             }
 
             const rank = 'First Officer';
             const basePay = calculateBasePayForPeriod(rank);
             const totalCredits = calculateTotalCreditHours(dataLines);
-            const odtaPay = calculateOdta(dataLines);
-            const { ddoPay, cancelledAccomPay } = calculateSpecialAllowances(dataLines, rank);
             const hoursOverTrigger = totalCredits - periodInfo.trigger;
 
+            let productivityPay = 0;
+            if (hoursOverTrigger > 0) {
+                productivityPay = hoursOverTrigger * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+            }
+
+            const allowances = calculateAllowancesByFortnight(dataLines, rank, parseDateFromRoster(rosterStartDateStr));
+            
+            let infringementPay = 0;
+            const infringementCount = parseInt(document.getElementById('infringementInput').value, 10);
+            if (infringementCount > 0) {
+                infringementPay = infringementCount * EBA_CONSTANTS.DDO_INFRINGEMENT_HOURS * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+            }
+
             calculationResults = {
-                rank, rosterStartDate, basePay, odtaPay, ddoPay, cancelledAccomPay,
+                rank, basePay, productivityPay, infringementPay, allowances,
                 periodType: periodInfo.type,
                 totalCredits,
                 creditTrigger: periodInfo.trigger,
-                hoursOverTrigger: hoursOverTrigger > 0 ? hoursOverTrigger : 0,
-                productivityPay: 0, // Placeholder
             };
             
             updateModalContent();
@@ -337,36 +275,43 @@
          * Updates the modal's HTML with the latest results.
          */
         function updateModalContent() {
-             const resultsOutput = document.getElementById('resultsOutput');
              const res = calculationResults;
-
+             const resultsOutput = document.getElementById('resultsOutput');
              if (!res.basePay) {
-                 resultsOutput.innerHTML = '<p>Could not calculate. Please check the pasted data format.</p>';
+                 resultsOutput.innerHTML = '<p>Could not calculate. Please check data.</p>';
                  return;
              }
              
-             const totalPay = res.basePay + res.odtaPay + res.ddoPay + res.cancelledAccomPay + res.productivityPay;
+             const littlePayAllowances = res.allowances.fortnight1.odta + res.allowances.fortnight1.ddo + res.allowances.fortnight1.bneo;
+             const littlePay = (res.basePay / 2) + littlePayAllowances;
+
+             const bigPayAllowances = res.allowances.fortnight2.odta + res.allowances.fortnight2.ddo + res.allowances.fortnight2.bneo;
+             const bigPay = (res.basePay / 2) + bigPayAllowances + res.productivityPay + res.infringementPay;
+             
+             const totalPay = littlePay + bigPay;
 
              let summaryHTML = `
-                <p><strong>Rank:</strong> ${res.rank}</p>
-                <p><strong>Period Type:</strong> <span style="font-weight: bold; color: ${res.periodType === 'Peak' ? '#C2410C' : '#16A34A'};">${res.periodType}</span></p>
+                <div class="pay-split">
+                    <div class="pay-fortnight">
+                        <h4>Little Pay (First Fortnight)</h4>
+                        <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
+                        <p>Allowances: $${littlePayAllowances.toFixed(2)}</p>
+                        <p><strong>Total: $${littlePay.toFixed(2)}</strong></p>
+                    </div>
+                     <div class="pay-fortnight">
+                        <h4>Big Pay (Second Fortnight)</h4>
+                        <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
+                        <p>Allowances: $${bigPayAllowances.toFixed(2)}</p>
+                        <p>Productivity Pay: $${res.productivityPay.toFixed(2)}</p>
+                        <p>DDO Infringement: $${res.infringementPay.toFixed(2)}</p>
+                        <p><strong>Total: $${bigPay.toFixed(2)}</strong></p>
+                    </div>
+                </div>
                 <hr>
-                <p><strong>Base Pay for Period:</strong> $${res.basePay.toFixed(2)}</p>
-                <p><strong>Overnight Allowance (ODTA):</strong> $${res.odtaPay.toFixed(2)}</p>
-                <p><strong>DDO Worked Payment:</strong> $${res.ddoPay.toFixed(2)}</p>
-                <p><strong>Cancelled Accom Allowance:</strong> $${res.cancelledAccomPay.toFixed(2)}</p>
+                <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
                 <hr>
-                <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} hours</p>
-                <p><strong>Credit Hour Trigger:</strong> ${res.creditTrigger.toFixed(2)} hours</p>
+                <p class="total-pay">Estimated Total Pay for Period: $${totalPay.toFixed(2)}</p>
             `;
-
-            if (res.hoursOverTrigger > 0) {
-                summaryHTML += `<p><strong>Productivity Pay Due:</strong> (Calculation to be added)</p>`;
-            } else {
-                 summaryHTML += `<p><strong>Productivity Pay Due:</strong> $0.00 <em style="font-size: 0.9em;">(Credits are below the trigger)</em></p>`;
-            }
-            
-            summaryHTML += `<hr><p class="total-pay">Estimated Total Pay: $${totalPay.toFixed(2)}</p>`;
             
             resultsOutput.innerHTML = summaryHTML;
         }
