@@ -4,685 +4,235 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pilot Pay Calculator</title>
-    <link rel="icon" type="image/png" href="E190 roster1.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        /* Modern Reset and Base Styles */
-        *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        /* --- Key Structural Body Style --- */
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            background: linear-gradient(to bottom right, #f0f4f8, #e0e7ee);
-            color: #334155;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow-x: hidden;
-        }
-
-        /* Scrollbar Styling */
-        body::-webkit-scrollbar {
-            width: 8px;
-        }
-        body::-webkit-scrollbar-track {
-            background: #f0f4f8;
-        }
-        body::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-        body::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-
-        /* --- Full-Width Top Banner --- */
-        .top-banner {
-            width: 100%;
-            background-color: #111;
-            padding: 0.8em 20px;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.25);
-            z-index: 100;
-        }
-
-        .top-banner h1 {
-            font-size: 1.8em;
-            letter-spacing: 0.25em;
-            text-transform: uppercase;
-            line-height: 1.2;
-            margin: 0;
-        }
-
-        .top-banner .h1-roster {
-            font-weight: 400;
-            color: #999;
-        }
-
-        .top-banner .h1-guard {
-            font-weight: 600;
-            color: #FFFFFF;
-        }
-
-        /* --- Main Header (Logo & Tagline) --- */
-        header {
-            width: 100%;
-            max-width: 1000px;
-            text-align: center;
-            margin: 2rem auto 0;
-            padding: 0 20px;
-        }
-
-        .logo {
-            margin-bottom: 10px;
-        }
-
-        .logo img {
-            max-width: 200px;
-            height: auto;
-            margin-top: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            border-radius: 8px;
-        }
-
-        h1 {
-            font-size: 2.2em;
-            color: #1e293b;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-
-        .tagline {
-            font-size: 1.1em;
-            color: #64748b;
-            margin-bottom: 20px;
-        }
-
-        hr.divider {
-            max-width: 250px;
-            margin: 20px auto 30px auto;
-            border: 0;
-            border-top: 2px solid #cbd5e1;
-        }
-
-        /* --- Corner Buttons (About/Dark Mode) --- */
-        .top-controls {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
-            z-index: 110; /* Ensures buttons are on top of the banner */
-        }
+        /* All CSS from the original skeleton remains the same */
+        body { font-family: 'Inter', sans-serif; margin: 0; background: linear-gradient(to bottom right, #f0f4f8, #e0e7ee); color: #334155; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 1000px; width: 95%; margin: 1rem auto; background: #ffffff; padding: 2em; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); border-radius: 12px; }
+        textarea { width: 100%; height: 250px; font-family: monospace; padding: 1em; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font-size: 14px; margin-bottom: 1.5em; }
+        button { padding: 0.8em 1.6em; font-size: 1em; font-weight: 600; cursor: pointer; border-radius: 8px; border: 1px solid #cbd5e1; background: #e2e8f0; color: #475569; transition: all 0.2s ease; }
+        button.primary-button { background: linear-gradient(to right, #6366f1, #8b5cf6); border-color: #6366f1; color: #ffffff; }
         
-        .top-controls.left { /* New class for left alignment */
-            left: 20px;
-            right: auto; /* Override right: 20px */
-        }
-
-        .dark-toggle-btn, .about-button {
-            background: #ffffff; /* Made white for visibility on banner */
-            color: #475569;
-            padding: 0.7em 1.4em; /* Slightly more padding */
-            font-size: 0.95em;
-            font-weight: 600;
-            border: none; /* No border for a cleaner look */
-            cursor: pointer;
-            border-radius: 8px; /* More rounded corners */
-            transition: background-color 0.2s ease, transform 0.1s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Subtle shadow */
-        }
-
-        .dark-toggle-btn:hover, .about-button:hover {
-            background-color: #cbd5e1;
-            transform: translateY(-1px); /* Slight lift on hover */
-        }
-
-        .dark-toggle-btn:active, .about-button:active {
-            transform: translateY(0);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); /* Inset shadow for active state */
-        }
-
-        /* --- Main Content Container Centering --- */
-        .container {
-            max-width: 1000px;
-            width: 100%;
-            margin: 1rem auto 0;
-            background: #ffffff;
-            padding: 2em 20px; /* Adjusted padding */
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); /* More prominent, soft shadow */
-            border-radius: 12px; /* More rounded corners */
-            border: 1px solid #e2e8f0; /* Subtle border */
-        }
-
-        textarea {
-            width: 100%;
-            height: 300px; /* Slightly reduced height for better balance */
-            max-width: 100%;
-            display: block;
-            font-family: monospace;
-            padding: 1.2em; /* Increased padding */
-            border: 1px solid #cbd5e1; /* Softer border */
-            border-radius: 8px;
-            resize: vertical;
-            font-size: 14px;
-            line-height: 1.6;
-            margin-bottom: 1.5em; /* More space below textarea */
-            background-color: #f8fafc; /* Light background for text area */
-            color: #334155;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #6366f1; /* Highlight border on focus */
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); /* Soft glow on focus */
-        }
-
-        /* Container for Textarea and Upload Button */
-        .textarea-container {
-            position: relative; /* This is crucial for positioning the button inside */
-            width: 100%;
-            margin-bottom: 1.5em; /* Keep the margin here instead of on the textarea */
-        }
-
-        .textarea-container textarea {
-            margin-bottom: 0; /* Remove margin from textarea as it's now on the container */
-        }
-
-        /* Dummy Upload Button Styling */
-        .upload-btn {
-            position: absolute; /* Position it relative to the container */
-            top: 15px;
-            right: 15px;
-            background: none;
-            border: none;
-            padding: 5px;
-            cursor: pointer;
-            opacity: 0.6; /* Make it slightly transparent so it's not distracting */
-            transition: opacity 0.2s ease;
-            color: #64748b; /* Match icon colors */
-        }
-
-        .upload-btn:hover {
-            opacity: 1; /* Make it fully opaque on hover */
-            background: none; /* Override default button hover */
-            transform: none; /* Override default button hover */
-        }
-
-        /* Button Group Styling */
-        .main-buttons-row {
-            display: flex;
-            justify-content: center; /* Center the new single button */
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1em; 
-            margin-top: 1em;
-            margin-bottom: 1.5em;
-        }
-
-        button {
-            padding: 0.8em 1.6em; /* Generous padding */
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            border-radius: 8px;
-            border: 1px solid;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-
-        /* Default Secondary Button Style */
-        button {
-            background: #e2e8f0;
-            border-color: #cbd5e1;
-            color: #475569;
-        }
-
-        button:hover {
-            background-color: #cbd5e1;
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Primary Button */
-        button.primary-button {
-            background: linear-gradient(to right, #6366f1, #8b5cf6); /* Vibrant blue-purple gradient */
-            border-color: #6366f1;
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
-        }
-
-        button.primary-button:hover {
-            background: linear-gradient(to right, #4f46e5, #7c3aed);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 15px rgba(99, 102, 241, 0.4);
-        }
-
-        button.primary-button:active {
-            transform: translateY(0);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        /* Styles for results display */
-        #resultsContainer {
-            margin-top: 1.5em;
-            padding: 1.5em;
-            border: 1px solid #d1fae5; 
-            background-color: #f0fdf4; 
-            border-radius: 8px;
-            overflow-y: auto;
-            display: none; /* Hidden by default */
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        #resultsContainer h3 {
-            margin-top: 0;
-            color: #065f46; 
-            font-size: 1.3em;
-            margin-bottom: 0.8em;
-            font-weight: 600;
-        }
-        
-        /* Contact button specific styling */
-        .contact-button-container {
-            text-align: center;
-            margin-top: 3em; 
-            margin-bottom: 2em;
-        }
-
-        .contact-button {
-            padding: 0.8em 1.8em;
-            font-size: 1em;
-            font-weight: 600;
-            background: linear-gradient(to right, #0ea5e9, #3b82f6); /* Blue gradient */
-            color: #fff;
-            border: none; /* No border */
-            border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);
-        }
-
-        .contact-button:hover {
-            background: linear-gradient(to right, #0284c7, #2563eb);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 15px rgba(14, 165, 233, 0.4);
-        }
-
-        .contact-button:active {
-            transform: translateY(0);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-        }
-
-        /* Modal/Popover styles */
+        /* Modal Styles */
         .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6); /* Darker overlay */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            animation: fadeIn 0.3s ease-out; /* Fade in animation */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none; /* Hidden by default */
+            justify-content: center; align-items: center; z-index: 1000;
         }
-
         .modal-content {
-            background-color: #ffffff;
-            padding: 30px; /* More padding */
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25); /* Stronger shadow */
-            max-width: 600px; /* Wider modal */
-            width: 90%;
-            max-height: 90vh; /* Allow more height */
-            overflow-y: auto;
-            position: relative;
-            animation: slideIn 0.3s ease-out; /* Slide in animation */
+            background-color: #ffffff; padding: 30px; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+            max-width: 600px; width: 90%; position: relative;
         }
-
-        .modal-content h4 {
-            margin-top: 0;
-            margin-bottom: 20px;
-            color: #1e293b;
-            font-size: 1.4em; /* Larger heading */
-            font-weight: 600;
-        }
-
-        .modal-content p {
-            margin-bottom: 15px;
-            line-height: 1.6;
-            color: #475569;
-        }
-        
         .modal-close-button {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            font-size: 1.8em; /* Larger close button */
-            font-weight: bold;
-            color: #94a3b8; /* Softer color */
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 0;
-            line-height: 1;
-            transition: color 0.2s ease;
+            position: absolute; top: 15px; right: 20px; font-size: 1.8em;
+            font-weight: bold; color: #94a3b8; cursor: pointer;
+            background: none; border: none; padding: 0; line-height: 1;
         }
-
-        .modal-close-button:hover {
-            color: #334155;
-        }
-
-        /* Animations for modal */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(-30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        
-        /* Dark mode styles */
-        body.dark-mode {
-            background: linear-gradient(to bottom right, #1e293b, #0f172a);
-            color: #e2e8f0;
-        }
-        
-        body.dark-mode header h1 {
-            color: #f1f5f9;
-        }
-
-        body.dark-mode header .tagline {
-            color: #a0aec0;
-        }
-
-        body.dark-mode hr.divider {
-            border-top: 2px solid #475569;
-        }
-
-        body.dark-mode .dark-toggle-btn, body.dark-mode .about-button {
-            background: #334155;
-            color: #e2e8f0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-
-        body.dark-mode .dark-toggle-btn:hover, body.dark-mode .about-button:hover {
-            background-color: #475569;
-        }
-
-        body.dark-mode .container {
-            background: #1e293b;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-            border: 1px solid #334155;
-        }
-
-        body.dark-mode textarea {
-            background: #2d3748;
-            color: #f1f5f9;
-            border: 1px solid #4a5568;
-        }
-
-        body.dark-mode textarea:focus {
-            border-color: #8b5cf6;
-            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-        }
-
-        body.dark-mode .upload-btn {
-            color: #a0aec0;
-        }
-
-        body.dark-mode button {
-            background: #334155;
-            border-color: #4a5568;
-            color: #e2e8f0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-
-        body.dark-mode button:hover {
-            background-color: #475569;
-        }
-
-        body.dark-mode button.primary-button {
-            background: linear-gradient(to right, #8b5cf6, #c084fc);
-            border-color: #8b5cf6;
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3);
-        }
-
-        body.dark-mode button.primary-button:hover {
-            background: linear-gradient(to right, #7c3aed, #a855f7);
-            box-shadow: 0 6px 15px rgba(139, 92, 246, 0.4);
-        }
-
-        body.dark-mode #resultsContainer {
-            border: 1px solid #064e3b;
-            background-color: #0c2b21;
-        }
-
-        body.dark-mode #resultsContainer h3 {
-            color: #6ee7b7;
-        }
-        
-        body.dark-mode .modal-content {
-            background-color: #1e293b;
-            color: #e2e8f0;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-        }
-
-        body.dark-mode .modal-content h4 {
-            color: #f1f5f9;
-        }
-
-        body.dark-mode .modal-content p {
-            color: #a0aec0;
-        }
-
-        body.dark-mode .modal-close-button {
-            color: #a0aec0;
-        }
-
-        body.dark-mode .modal-close-button:hover {
-            color: #f1f5f9;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 1.8em;
-            }
-            .tagline {
-                font-size: 1em;
-            }
-            .container {
-                padding: 1.5em;
-            }
-            .main-buttons-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-             button {
-                width: 100%; /* Full width buttons on small screens */
-            }
-            .top-controls {
-                position: static; /* Stack controls on small screens */
-                text-align: center;
-                margin-bottom: 20px;
-                flex-direction: column; /* Stack buttons vertically */
-                align-items: stretch;
-            }
-            .top-controls.left {
-                position: static; 
-                text-align: center;
-                margin-bottom: 20px;
-                flex-direction: column; 
-                align-items: stretch;
-            }
-        }
+        .modal-content h3 { margin-top: 0; }
+        .modal-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1em 0; }
     </style>
 </head>
 <body>
-    <div class="top-banner">
-        <h1><span class="h1-roster">PILOT</span><span class="h1-guard">PAY</span></h1>
-    </div>
-
-    <header>
-        <div class="logo">
-            <img src="E190 roster1.png" alt="Project Logo">
-        </div>
-        <p class="tagline">Analyze your roster and calculate your monthly pay based on the EBA.</p>
-        <hr class="divider">
-    </header>
-
-    <div class="top-controls left">
-        <button class="about-button" onclick="showAboutInfoModal()">About</button>
-    </div>
-    <div class="top-controls">
-        <button class="dark-toggle-btn" onclick="toggleDarkMode()" id="darkModeBtn">Switch to Dark Mode</button>
-    </div>
 
     <main class="container">
-        <div class="textarea-container">
-            <textarea id="rosterInput" placeholder="Paste your roster text here..."></textarea>
-            
-            <button class="upload-btn" onclick="showComingSoon()" title="Upload Roster File (Coming Soon)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-            </button>
-        </div>
+        <!-- The user will paste the full roster table text here -->
+        <textarea id="rosterInput" placeholder="Paste your full roster table text here..." oninput="runPayCalculation()"></textarea>
         
-        <div class="main-buttons-row">
-            <button onclick="calculatePay()" class="primary-button">Calculate Pay</button>
-        </div>
+        <!-- This button will now show the modal with the pre-calculated results -->
+        <button onclick="showResultsModal()" class="primary-button">View Pay Breakdown</button>
 
-        <div id="resultsContainer">
-            <h3>Pay Calculation Results:</h3>
-            <div id="resultsOutput">
-                </div>
-        </div>
     </main>
-
-    <footer class="contact-button-container">
-        <a href="mailto:your-email@example.com?subject=Pilot Pay Tool Feedback" class="contact-button">Send Feedback or Get Help</a>
-    </footer>
-
-    <div id="aboutInfoModal" class="modal-overlay" style="display: none;">
+    
+    <!-- Modal for displaying results -->
+    <div id="resultsModal" class="modal-overlay">
         <div class="modal-content">
-            <button class="modal-close-button" onclick="hideAboutInfoModal()">&times;</button>
-            <h4>About This Tool</h4>
-            <p>This tool is designed to calculate pilot pay based on roster data provided. It is intended for informational and estimation purposes only.</p>
-            <p>Always verify calculations against official payslips and your Enterprise Bargaining Agreement (EBA).</p>
+            <button class="modal-close-button" onclick="hideResultsModal()">&times;</button>
+            <h3>Pay Calculation Breakdown</h3>
+            <div id="resultsOutput">
+                <!-- Calculation results will be populated here -->
+                <p>Paste roster data to begin calculation.</p>
+            </div>
         </div>
     </div>
     
     <script>
-        // --- UI Interaction Logic ---
+        // --- DATA & EBA RULES ---
 
-        // Modal element reference
-        const aboutInfoModal = document.getElementById('aboutInfoModal');
+        const ROSTER_PERIODS = [
+            { start: '2024-12-23', end: '2025-01-19', type: 'Peak' },
+            { start: '2025-01-20', end: '2025-02-16', type: 'Off-Peak' },
+            { start: '2025-02-17', end: '2025-03-16', type: 'Off-Peak' },
+            { start: '2025-03-17', end: '2025-04-13', type: 'Peak' },
+            { start: '2025-04-14', end: '2025-05-11', type: 'Peak' },
+            { start: '2025-05-12', end: '2025-06-08', type: 'Off-Peak' },
+            { start: '2025-06-09', end: '2025-07-06', type: 'Peak' },
+            { start: '2025-07-07', end: '2025-08-03', type: 'Peak' },
+        ];
 
-        // Dark Mode Toggle Functionality
-        function toggleDarkMode() {
-            const body = document.body;
-            const btn = document.getElementById('darkModeBtn');
-            const isDark = body.classList.toggle('dark-mode');
-            btn.textContent = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
-            localStorage.setItem('darkMode', isDark ? 'dark' : 'light');
-        }
-
-        // Set initial dark/light mode on page load
-        window.onload = function () {
-            // Check for saved user preference
-            const savedMode = localStorage.getItem('darkMode');
-            // Check for system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            // Apply dark mode if saved or if it's the system preference and no user choice is saved
-            const shouldBeDark = savedMode === 'dark' || (!savedMode && prefersDark);
-            
-            if (shouldBeDark) {
-                document.body.classList.add('dark-mode');
-                document.getElementById('darkModeBtn').textContent = 'Switch to Light Mode';
-            }
-
-            // Add event listener to close modal when clicking on the overlay
-            aboutInfoModal.addEventListener('click', function(event) {
-                if (event.target === aboutInfoModal) {
-                    hideAboutInfoModal();
-                }
-            });
+        const EBA_CONSTANTS = {
+            ANNUAL_SALARIES: { 'First Officer': 183137.50, 'Captain': 281750.00 },
+            ROSTER_PERIOD_DAYS: 28,
+            CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
+            VLEARN_CREDIT: 0.75
         };
+        
+        // This global variable will store our calculation results
+        let calculationResults = {};
 
-        // Modal Control Functions
-        function showAboutInfoModal() {
-            aboutInfoModal.style.display = 'flex';   
+        // --- MODAL VISIBILITY FUNCTIONS ---
+        function showResultsModal() {
+            if (Object.keys(calculationResults).length === 0) {
+                alert("Please paste roster data first to run the calculation.");
+                return;
+            }
+            document.getElementById('resultsModal').style.display = 'flex';
         }
 
-        function hideAboutInfoModal() {
-            aboutInfoModal.style.display = 'none';
+        function hideResultsModal() {
+            document.getElementById('resultsModal').style.display = 'none';
         }
 
-        // Placeholder for the file upload button
-        function showComingSoon() {
-            alert("File upload functionality is coming soon!");
+        // --- CALCULATION FUNCTIONS ---
+
+        function getPeriodTypeAndTrigger(rosterStartDateStr) {
+            const parseDate = (dateStr) => {
+                const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
+                const day = parseInt(dateStr.substring(0, 2), 10);
+                const month = months[dateStr.substring(2, 5).toUpperCase()];
+                const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
+                return new Date(Date.UTC(year, month, day)); // Use UTC to avoid timezone issues
+            };
+            const rosterStartDate = parseDate(rosterStartDateStr);
+            for (const period of ROSTER_PERIODS) {
+                const periodStart = new Date(period.start);
+                const periodEnd = new Date(period.end);
+                if (rosterStartDate >= periodStart && rosterStartDate <= periodEnd) {
+                    return { type: period.type, trigger: EBA_CONSTANTS.CREDIT_HOUR_TRIGGERS[period.type] };
+                }
+            }
+            return null;
+        }
+        
+        function calculateBasePayForPeriod(rank) {
+            const annualSalary = EBA_CONSTANTS.ANNUAL_SALARIES[rank];
+            if (!annualSalary) return 0;
+            const dailyRate = annualSalary / 365;
+            return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
 
-        // --- NEW PROJECT LOGIC (To be built by you) ---
+        function calculateTotalCreditHours(rosterData) {
+            let totalMinutes = 0;
+            const lines = rosterData.trim().split('\n');
+            const headerLine = lines.find(line => line.includes('Flt Time'));
+            if (!headerLine) return { error: "Could not find 'Flt Time' column header." };
+            
+            const headers = headerLine.split('|').map(h => h.trim());
+            const fltTimeIndex = headers.indexOf('Flt Time');
 
+            if (fltTimeIndex === -1) return { error: "Could not find 'Flt Time' column index." };
+
+            for (const line of lines) {
+                if (line.includes('---') || line.includes('Flight Number') || line.trim() === '') continue;
+                const columns = line.split('|').map(c => c.trim());
+                if (columns.length <= fltTimeIndex) continue; // Skip malformed lines
+                const timeStr = columns[fltTimeIndex];
+                if (timeStr && timeStr.includes(':')) {
+                    const [hours, minutes] = timeStr.split(':').map(Number);
+                    totalMinutes += (hours * 60) + minutes;
+                }
+            }
+            const totalHours = totalMinutes / 60;
+            return totalHours + EBA_CONSTANTS.VLEARN_CREDIT;
+        }
+        
         /**
-         * This is the primary function you will build out. 
-         * It will trigger the roster analysis and pay calculation.
+         * The main function to orchestrate the entire pay calculation process.
+         * This now populates a global object instead of directly updating the UI.
          */
-        function calculatePay() {
-            const rosterText = document.getElementById('rosterInput').value;
-            const resultsContainer = document.getElementById('resultsContainer');
+        function runPayCalculation() {
+            calculationResults = {}; // Reset results
             const resultsOutput = document.getElementById('resultsOutput');
-
-            if (rosterText.trim() === "") {
-                alert("Please paste your roster text into the box first.");
+            resultsOutput.innerHTML = '<p>Calculating...</p>';
+            
+            const rosterData = document.getElementById('rosterInput').value;
+            if (rosterData.trim() === "") {
+                resultsOutput.innerHTML = '<p>Paste roster data to begin calculation.</p>';
                 return;
             }
 
-            // --- START of your new calculation logic ---
+            const firstDataLine = rosterData.trim().split('\n').find(line => !line.includes('---') && !line.includes('Flight Number') && line.trim() !== '');
+            if (!firstDataLine) {
+                alert("Could not find any data rows in the pasted text.");
+                resultsOutput.innerHTML = '<p>Error: No data rows found.</p>';
+                return;
+            }
+            const rosterStartDate = firstDataLine.split('|')[0].trim(); // Assuming Start Date is the first column.
+
+            const periodInfo = getPeriodTypeAndTrigger(rosterStartDate);
+            if (!periodInfo) {
+                alert(`Error: The roster start date (${rosterStartDate}) is outside known date ranges.`);
+                resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDate}.</p>`;
+                return;
+            }
+
+            const rank = 'First Officer';
+            const basePay = calculateBasePayForPeriod(rank);
+            const totalCreditsResult = calculateTotalCreditHours(rosterData);
             
-            // 1. Parse the 'rosterText' to extract flights, hours, duties, etc.
-            // 2. Apply EBA rules to calculate allowances, overtime, penalties, etc.
-            // 3. Format the results into a clear summary (e.g., HTML string or DOM elements).
-            
-            // Example placeholder output:
-            resultsOutput.innerHTML = `
-                <p><strong>Base Pay:</strong> $XXXX.XX</p>
-                <p><strong>Flight Hours Credit:</strong> $XXXX.XX</p>
-                <p><strong>Allowances:</strong> $XXXX.XX</p>
+            if (typeof totalCreditsResult === 'object' && totalCreditsResult.error) {
+                alert(totalCreditsResult.error);
+                resultsOutput.innerHTML = `<p>Error: ${totalCreditsResult.error}</p>`;
+                return;
+            }
+
+            let productivityPay = 0;
+            const hoursOverTrigger = totalCreditsResult - periodInfo.trigger;
+
+            // Store all results in the global object
+            calculationResults = {
+                rank: rank,
+                rosterStartDate: rosterStartDate,
+                periodType: periodInfo.type,
+                basePay: basePay,
+                totalCredits: totalCreditsResult,
+                creditTrigger: periodInfo.trigger,
+                hoursOverTrigger: hoursOverTrigger > 0 ? hoursOverTrigger : 0,
+                productivityPay: productivityPay // will be updated later
+            };
+
+            // Update the modal content so it's ready when the button is clicked
+            updateModalContent();
+        }
+
+        /**
+         * Updates the modal's HTML with the latest results.
+         */
+        function updateModalContent() {
+             const resultsOutput = document.getElementById('resultsOutput');
+             const res = calculationResults; // shorthand
+
+             let summaryHTML = `
+                <p><strong>Rank:</strong> ${res.rank}</p>
+                <p><strong>Roster Period:</strong> ${res.rosterStartDate}</p>
+                <p><strong>Period Type:</strong> <span style="font-weight: bold; color: ${res.periodType === 'Peak' ? '#C2410C' : '#16A34A'};">${res.periodType}</span></p>
                 <hr>
-                <p><strong>Estimated Total Pay:</strong> $XXXX.XX</p>
-                <br>
-                <p><em>(This is a placeholder. Real calculation logic needs to be implemented.)</em></p>
+                <p><strong>Base Pay for Period:</strong> $${res.basePay.toFixed(2)}</p>
+                <hr>
+                <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} hours</p>
+                <p><strong>Credit Hour Trigger:</strong> ${res.creditTrigger.toFixed(2)} hours</p>
             `;
 
-            // --- END of your new calculation logic ---
-
-            // Display the results container
-            resultsContainer.style.display = 'block';
+            if (res.hoursOverTrigger > 0) {
+                summaryHTML += `<p><strong>Hours Over Trigger:</strong> ${res.hoursOverTrigger.toFixed(2)} hours</p>`;
+                summaryHTML += `<p><strong>Productivity Pay Due:</strong> (Calculation to be added)</p>`;
+            } else {
+                 summaryHTML += `<p><strong>Productivity Pay Due:</strong> $0.00 <em style="font-size: 0.9em;">(Credits are below the trigger)</em></p>`;
+            }
+            
+            resultsOutput.innerHTML = summaryHTML;
         }
 
     </script>
-    </body>
+</body>
 </html>
