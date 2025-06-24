@@ -93,7 +93,7 @@
             PRODUCTIVITY_RATES: { 'First Officer': 236.93 },
             CANCELLED_ACCOM_ALLOWANCE: 82.40,
             DDO_WORKED_MINIMUM_HOURS: 5,
-            DDO_INFRINGEMENT_HOURS: 5 // Assumption: A standard infringement pays 5 hours. Clause 37.4
+            DDO_INFRINGEMENT_HOURS: 5
         };
         let calculationResults = {};
 
@@ -106,6 +106,7 @@
             document.getElementById('resultsModal').style.display = 'flex';
         }
         function hideResultsModal() { document.getElementById('resultsModal').style.display = 'none'; }
+        
         const parseDateFromRoster = (dateStr) => {
             if (!dateStr || dateStr.length < 7) return null;
             const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
@@ -114,13 +115,13 @@
             const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
             return new Date(Date.UTC(year, month, day));
         };
-        const getDateTime = (dateStr, timeStr) => {
-            const date = parseDateFromRoster(dateStr);
-            if (date && timeStr && timeStr.includes(':')) {
+        const getDateTime = (dateObj, timeStr) => {
+            const newDate = new Date(dateObj); // Clone the date object
+            if (timeStr && timeStr.includes(':')) {
                 const [hours, minutes] = timeStr.split(':').map(Number);
-                date.setUTCHours(hours, minutes);
+                newDate.setUTCHours(hours, minutes, 0, 0);
             }
-            return date;
+            return newDate;
         };
         const parseTimeToHours = (timeStr) => {
             if (!timeStr || !timeStr.includes(':')) return 0;
@@ -147,75 +148,136 @@
             const dailyRate = annualSalary / 365;
             return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
-        function calculateTotalCreditHours(dataLines) {
+        function calculateTotalCreditHours(dayObjects) {
             let totalFlightHours = 0;
-            const fltTimeIndex = 13;
-            for (const line of dataLines) {
-                const columns = line.split('|').map(c => c.trim());
-                if (columns.length > fltTimeIndex) {
-                    totalFlightHours += parseTimeToHours(columns[fltTimeIndex]);
-                }
-            }
+            dayObjects.forEach(day => {
+                day.duties.forEach(duty => {
+                    totalFlightHours += parseTimeToHours(duty.fltTime);
+                });
+            });
             return totalFlightHours + EBA_CONSTANTS.VLEARN_CREDIT;
         }
 
         /**
-         * Calculates allowances and splits them by fortnight.
+         * Calculates ODTA based on trips away from home base.
+         * @param {Array} dayObjects - The pre-processed roster data.
+         * @param {string} homeBase - The pilot's home base (e.g., 'MEL').
+         * @returns {number} Total ODTA pay.
          */
-        function calculateAllowancesByFortnight(dataLines, rank, rosterStartDate) {
+        function calculateOdta(dayObjects, homeBase) {
+            let totalOdtaHours = 0;
+            let tripActive = false;
+            let tripStartDate = null;
+            let tripSignOnTime = null;
+
+            dayObjects.forEach((day, index) => {
+                const isOvernightDay = day.duties.some(d => d.hotel && d.hotel !== '');
+                const isDayOffAtHome = day.sector === homeBase && ['BLANK', 'DDO', 'PDO'].includes(day.duties[0]?.duty);
+
+                if (!tripActive && isOvernightDay) {
+                    // Start of a new trip
+                    tripActive = true;
+                    tripStartDate = day.date;
+                    tripSignOnTime = day.duties[0]?.rpt || day.duties[0]?.std;
+                }
+
+                if (tripActive) {
+                    const nextDay = dayObjects[index + 1];
+                    const isEndOfTrip = !nextDay || (nextDay.sector === homeBase && ['BLANK', 'DDO', 'PDO'].includes(nextDay.duties[0]?.duty));
+
+                    if (isEndOfTrip) {
+                        tripActive = false;
+                        const lastDuty = day.duties[day.duties.length - 1];
+                        const tripSignOffTime = lastDuty.signOff;
+
+                        if (tripStartDate && tripSignOnTime && tripSignOffTime) {
+                            let endDay = day;
+                            // Sign off can be on the next day
+                            if (parseTimeToHours(tripSignOffTime) < parseTimeToHours(tripSignOnTime) && day.duties.length === 1 && nextDay) {
+                                // Simple check for overnight signoff
+                                let tempDate = new Date(day.date);
+                                tempDate.setDate(tempDate.getDate() + 1);
+                                endDay = { date: tempDate };
+                            }
+
+                            const startDateTime = getDateTime(tripStartDate, tripSignOnTime);
+                            const endDateTime = getDateTime(endDay.date, tripSignOffTime);
+
+                            if (endDateTime > startDateTime) {
+                                const durationMs = endDateTime - startDateTime;
+                                totalOdtaHours += durationMs / (1000 * 60 * 60);
+                            }
+                        }
+                    }
+                }
+            });
+
+            return totalOdtaHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
+        }
+        
+        function calculateAllowancesByFortnight(dayObjects, rank, rosterStartDate) {
             let allowances = {
-                fortnight1: { odta: 0, ddo: 0, bneo: 0 },
-                fortnight2: { odta: 0, ddo: 0, bneo: 0 }
+                fortnight1: { ddo: 0, bneo: 0 },
+                fortnight2: { ddo: 0, bneo: 0 }
             };
             const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             const fortnightEndDate = new Date(rosterStartDate);
-            fortnightEndDate.setDate(fortnightEndDate.getDate() + 13); // First 14 days
+            fortnightEndDate.setDate(fortnightEndDate.getDate() + 13);
 
-            // Helper to get full date for any roster line
-            const getLineDate = (lineIndex) => {
-                let dateStr = dataLines[lineIndex].split('|')[1].trim();
-                if (dateStr) return parseDateFromRoster(dateStr);
-                let prevIndex = lineIndex - 1;
-                while (prevIndex >= 0) {
-                    dateStr = dataLines[prevIndex].split('|')[1].trim();
-                    if (dateStr) return parseDateFromRoster(dateStr);
-                    prevIndex--;
-                }
-                return null;
-            };
+            dayObjects.forEach(day => {
+                const fortnight = (day.date <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
+                let dailyFlightHours = 0;
 
-            // DDO and BNEO allowances
-            dataLines.forEach((line, i) => {
-                const columns = line.split('|').map(c => c.trim());
-                const lineDate = getLineDate(i);
-                if (!lineDate) return;
-                const fortnight = (lineDate <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
-
-                if (columns.length > 14 && columns[14].toUpperCase() === 'BNEO') {
-                    allowances[fortnight].bneo += EBA_CONSTANTS.CANCELLED_ACCOM_ALLOWANCE;
-                }
+                day.duties.forEach(duty => {
+                    if (duty.hotel.toUpperCase() === 'BNEO') {
+                        allowances[fortnight].bneo += EBA_CONSTANTS.CANCELLED_ACCOM_ALLOWANCE;
+                    }
+                    dailyFlightHours += parseTimeToHours(duty.fltTime);
+                });
                 
-                if (columns.length > 6 && columns[6].startsWith('$')) {
-                    const dailyFlightHours = parseTimeToHours(columns[13]);
-                    // Only pay if there was actual duty associated with the nomination
-                    if(dailyFlightHours > 0) {
+                if (day.duties.some(d => d.duty.startsWith('$'))) {
+                    if (dailyFlightHours > 0) {
                          const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
                          allowances[fortnight].ddo += payableHours * productivityRate;
                     }
                 }
             });
-
-            // ODTA (Placeholder - to be revisited with more robust logic)
-            const totalOdtaPay = 0; 
-            allowances.fortnight1.odta = totalOdtaPay / 2;
-            allowances.fortnight2.odta = totalOdtaPay / 2;
-
             return allowances;
         }
 
-        /**
-         * Main orchestration function.
-         */
+        // --- DATA PRE-PROCESSING ---
+        function preprocessRosterData(dataLines) {
+            const dayObjects = [];
+            let currentDay = null;
+
+            dataLines.forEach(line => {
+                const cols = line.split('|').map(c => c.trim());
+                const dateStr = cols[1];
+
+                if (dateStr) { // New day starts
+                    if (currentDay) dayObjects.push(currentDay);
+                    currentDay = {
+                        date: parseDateFromRoster(dateStr),
+                        sector: cols[4],
+                        duties: []
+                    };
+                }
+                
+                if (currentDay) {
+                     currentDay.duties.push({
+                        flightNumber: cols[3], duty: cols[6], rpt: cols[8],
+                        std: cols[9], sta: cols[10], signOff: cols[11],
+                        dutyTime: cols[12], fltTime: cols[13], hotel: cols[14]
+                    });
+                }
+            });
+            if (currentDay) dayObjects.push(currentDay); // Add the last day
+
+            return dayObjects;
+        }
+
+
+        // --- MAIN ORCHESTRATION ---
         function runPayCalculation() {
             calculationResults = {};
             const resultsOutput = document.getElementById('resultsOutput');
@@ -235,6 +297,7 @@
                 return;
             }
             
+            const dayObjects = preprocessRosterData(dataLines);
             const rosterStartDateStr = dataLines[0].split('|')[1].trim();
             const periodInfo = getPeriodTypeAndTrigger(rosterStartDateStr);
 
@@ -245,7 +308,7 @@
 
             const rank = 'First Officer';
             const basePay = calculateBasePayForPeriod(rank);
-            const totalCredits = calculateTotalCreditHours(dataLines);
+            const totalCredits = calculateTotalCreditHours(dayObjects);
             const hoursOverTrigger = totalCredits - periodInfo.trigger;
 
             let productivityPay = 0;
@@ -253,7 +316,10 @@
                 productivityPay = hoursOverTrigger * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             }
 
-            const allowances = calculateAllowancesByFortnight(dataLines, rank, parseDateFromRoster(rosterStartDateStr));
+            const allowances = calculateAllowancesByFortnight(dayObjects, rank, parseDateFromRoster(rosterStartDateStr));
+            const odtaPay = calculateOdta(dayObjects, 'MEL');
+            allowances.fortnight1.odta = odtaPay / 2; // Approximate split
+            allowances.fortnight2.odta = odtaPay / 2;
             
             let infringementPay = 0;
             const infringementCount = parseInt(document.getElementById('infringementInput').value, 10);
@@ -262,18 +328,13 @@
             }
 
             calculationResults = {
-                rank, basePay, productivityPay, infringementPay, allowances,
-                periodType: periodInfo.type,
-                totalCredits,
-                creditTrigger: periodInfo.trigger,
+                rank, basePay, productivityPay, infringementPay, allowances, odtaPay,
+                periodType: periodInfo.type, totalCredits, creditTrigger: periodInfo.trigger,
             };
             
             updateModalContent();
         }
 
-        /**
-         * Updates the modal's HTML with the latest results.
-         */
         function updateModalContent() {
              const res = calculationResults;
              const resultsOutput = document.getElementById('resultsOutput');
@@ -309,6 +370,7 @@
                 </div>
                 <hr>
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
+                 <p><strong>Overnight Allowance (ODTA):</strong> $${res.odtaPay.toFixed(2)}</p>
                 <hr>
                 <p class="total-pay">Estimated Total Pay for Period: $${totalPay.toFixed(2)}</p>
             `;
