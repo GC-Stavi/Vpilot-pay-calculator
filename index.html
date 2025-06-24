@@ -83,7 +83,7 @@
         // --- MODAL VISIBILITY FUNCTIONS ---
         function showResultsModal() {
             if (Object.keys(calculationResults).length === 0) {
-                alert("Please paste roster data first to run the calculation.");
+                alert("Please paste valid roster data first to run the calculation.");
                 return;
             }
             document.getElementById('resultsModal').style.display = 'flex';
@@ -120,22 +120,21 @@
             const dailyRate = annualSalary / 365;
             return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
-
-        function calculateTotalCreditHours(rosterData) {
+        
+        /**
+         * Calculates total accrued credit hours from an array of roster data lines.
+         * @param {string[]} dataLines - An array of strings, where each string is a data row from the roster.
+         * @returns {number} The total credit hours.
+         */
+        function calculateTotalCreditHours(dataLines) {
             let totalMinutes = 0;
-            const lines = rosterData.trim().split('\n');
-            const headerLine = lines.find(line => line.includes('Flt Time'));
-            if (!headerLine) return { error: "Could not find 'Flt Time' column header." };
-            
-            const headers = headerLine.split('|').map(h => h.trim());
-            const fltTimeIndex = headers.indexOf('Flt Time');
+            // The Flt Time column is the 13th one, which is at index 12 in a zero-based array
+            const fltTimeIndex = 13; 
 
-            if (fltTimeIndex === -1) return { error: "Could not find 'Flt Time' column index." };
-
-            for (const line of lines) {
-                if (line.includes('---') || line.includes('Flight Number') || line.trim() === '') continue;
+            for (const line of dataLines) {
                 const columns = line.split('|').map(c => c.trim());
                 if (columns.length <= fltTimeIndex) continue; // Skip malformed lines
+
                 const timeStr = columns[fltTimeIndex];
                 if (timeStr && timeStr.includes(':')) {
                     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -161,31 +160,36 @@
                 return;
             }
 
-            const firstDataLine = rosterData.trim().split('\n').find(line => !line.includes('---') && !line.includes('Flight Number') && line.trim() !== '');
-            if (!firstDataLine) {
-                alert("Could not find any data rows in the pasted text.");
-                resultsOutput.innerHTML = '<p>Error: No data rows found.</p>';
+            // --- Robust Parsing Logic ---
+            const allLines = rosterData.trim().split('\n');
+            // Filter out headers, titles, and formatting lines to get only data rows
+            const dataLines = allLines.filter(line => 
+                line.trim().startsWith('|') &&       // Must be part of the markdown table
+                !line.includes('---') &&              // Not a separator line
+                !line.includes('Start Date')          // Not the header row
+            );
+            
+            if (dataLines.length === 0) {
+                resultsOutput.innerHTML = '<p>Error: No valid data rows found in the pasted text.</p>';
+                // Don't alert here, just show message in modal
                 return;
             }
-            const rosterStartDate = firstDataLine.split('|')[0].trim(); // Assuming Start Date is the first column.
+
+            // The first column is empty in markdown, so start date is in the second column (index 1)
+            const rosterStartDate = dataLines[0].split('|')[1].trim();
 
             const periodInfo = getPeriodTypeAndTrigger(rosterStartDate);
             if (!periodInfo) {
-                alert(`Error: The roster start date (${rosterStartDate}) is outside known date ranges.`);
                 resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDate}.</p>`;
+                alert(`Error: The roster start date (${rosterStartDate}) is outside known date ranges.`);
                 return;
             }
 
             const rank = 'First Officer';
             const basePay = calculateBasePayForPeriod(rank);
-            const totalCreditsResult = calculateTotalCreditHours(rosterData);
+            // Pass the pre-filtered data lines to the calculation function
+            const totalCreditsResult = calculateTotalCreditHours(dataLines);
             
-            if (typeof totalCreditsResult === 'object' && totalCreditsResult.error) {
-                alert(totalCreditsResult.error);
-                resultsOutput.innerHTML = `<p>Error: ${totalCreditsResult.error}</p>`;
-                return;
-            }
-
             let productivityPay = 0;
             const hoursOverTrigger = totalCreditsResult - periodInfo.trigger;
 
@@ -211,6 +215,11 @@
         function updateModalContent() {
              const resultsOutput = document.getElementById('resultsOutput');
              const res = calculationResults; // shorthand
+
+             if (!res.basePay) { // Check if results are valid
+                 resultsOutput.innerHTML = '<p>Could not calculate. Please check the pasted data format.</p>';
+                 return;
+             }
 
              let summaryHTML = `
                 <p><strong>Rank:</strong> ${res.rank}</p>
