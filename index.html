@@ -37,10 +37,10 @@
         .pay-fortnight h4 { margin-top: 0; font-size: 0.9em; }
         .pay-fortnight p { margin: 0.5em 0; }
         
-        /* Number input for infringements */
+        /* Manual input styles */
         .manual-inputs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em; flex-wrap: wrap; gap: 20px; }
-        .infringement-control { display: flex; align-items: center; gap: 10px; }
-        .infringement-control input[type="number"] {
+        .input-control { display: flex; align-items: center; gap: 10px; }
+        .input-control input[type="number"] {
             width: 60px;
             padding: 0.5em;
             border: 1px solid #cbd5e1;
@@ -48,6 +48,7 @@
             text-align: center;
             font-size: 1em;
         }
+
     </style>
 </head>
 <body>
@@ -56,11 +57,11 @@
         <textarea id="rosterInput" placeholder="Paste your full roster table text here..." oninput="runPayCalculation()"></textarea>
         
         <div class="manual-inputs">
-             <div class="infringement-control">
+             <div class="input-control">
                 <label for="infringementInput">DDO Infringements:</label>
                 <input type="number" id="infringementInput" value="0" min="0" onchange="runPayCalculation()">
              </div>
-             <div class="infringement-control">
+             <div class="input-control">
                 <label for="cancelledCalloutInput">Cancelled Callouts:</label>
                 <input type="number" id="cancelledCalloutInput" value="0" min="0" onchange="runPayCalculation()">
              </div>
@@ -86,15 +87,41 @@
             { start: '2025-04-14', end: '2025-05-11', type: 'Peak' }, { start: '2025-05-12', end: '2025-06-08', type: 'Off-Peak' },
             { start: '2025-06-09', end: '2025-07-06', type: 'Peak' }, { start: '2025-07-07', end: '2025-08-03', type: 'Peak' },
         ];
+        
+        const RANK_ALIASES = {
+            'FO': 'First Officer',
+            'TFO': 'Training First Officer',
+            'CAPT': 'Captain',
+            'CAP': 'Captain',
+            'CPT': 'Captain',
+            'CC': 'Check Captain',
+            'STC': 'Senior Training Captain',
+            'TC': 'Training Captain'
+        };
+
         const EBA_CONSTANTS = {
-            ANNUAL_SALARIES: { 'First Officer': 183137.50, 'Captain': 281750.00 },
+            ANNUAL_SALARIES: { 
+                'First Officer': 183137.50, 
+                'Captain': 281750.00,
+                'Check Captain': 326830.00,
+                'Senior Training Captain': 318377.50,
+                'Training Captain': 309925.00,
+                'Training First Officer': 211312.50
+            },
+            PRODUCTIVITY_RATES: { 
+                'First Officer': 236.93, 
+                'Captain': 364.50,
+                'Check Captain': 422.82,
+                'Senior Training Captain': 411.89,
+                'Training Captain': 400.95,
+                'Training First Officer': 273.38
+            },
             ROSTER_PERIOD_DAYS: 28,
             CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
             VLEARN_CREDIT: 0.75,
             ODTA_HOURLY_RATE: 8.95,
             DUTY_RIG_RATIO: 1 / 2,
             SUPER_GUARANTEE_RATE: 0.115,
-            PRODUCTIVITY_RATES: { 'First Officer': 236.93 },
             CANCELLED_ACCOM_ALLOWANCE: 82.40,
             CANCELLED_CALLOUT_HOURS: 2,
             DDO_WORKED_MINIMUM_HOURS: 5,
@@ -235,6 +262,8 @@
                 fortnight2: { ddo: 0, bneo: 0 }
             };
             const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+            if(!productivityRate) return allowances;
+
             const fortnightEndDate = new Date(rosterStartDate);
             fortnightEndDate.setUTCDate(fortnightEndDate.getUTCDate() + 13);
 
@@ -258,6 +287,18 @@
             });
             return allowances;
         }
+        
+        function detectRankFromRoster(dayObjects) {
+            for (const day of dayObjects) {
+                for (const duty of day.duties) {
+                    const pairingDutyCode = duty.pairingDuty?.toUpperCase();
+                    if (pairingDutyCode && RANK_ALIASES[pairingDutyCode]) {
+                        return RANK_ALIASES[pairingDutyCode]; // Return the full rank name
+                    }
+                }
+            }
+            return null; // Return null if no known rank is found
+        }
 
         // --- DATA PRE-PROCESSING ---
         function preprocessRosterData(dataLines) {
@@ -279,7 +320,7 @@
                 
                 if (currentDay) {
                      currentDay.duties.push({
-                        flightNumber: cols[3], duty: cols[6], rpt: cols[8],
+                        flightNumber: cols[3], duty: cols[6], pairingDuty: cols[7], rpt: cols[8],
                         std: cols[9], sta: cols[10], signOff: cols[11],
                         dutyTime: cols[12], fltTime: cols[13], hotel: cols[14]
                     });
@@ -311,6 +352,12 @@
             }
             
             const dayObjects = preprocessRosterData(dataLines);
+            const rank = detectRankFromRoster(dayObjects);
+            if (!rank) {
+                resultsOutput.innerHTML = `<p>Error: Could not detect a valid pilot rank (e.g., FO, CAPT) from the 'Pairing Duty' column.</p>`;
+                return;
+            }
+
             const rosterStartDateStr = dataLines[0].split('|')[1].trim();
             const periodInfo = getPeriodTypeAndTrigger(rosterStartDateStr);
 
@@ -319,7 +366,6 @@
                 return;
             }
 
-            const rank = 'First Officer';
             const basePay = calculateBasePayForPeriod(rank);
             const totalCredits = calculateTotalCreditHours(dayObjects);
             const hoursOverTrigger = totalCredits - periodInfo.trigger;
@@ -332,7 +378,7 @@
             const rosterStartDate = parseDateFromRoster(rosterStartDateStr);
             const allowances = calculateAllowancesByFortnight(dayObjects, rank, rosterStartDate);
             const odtaPay = calculateOdta(dayObjects, 'MEL');
-            allowances.fortnight1.odta = odtaPay / 2; // Approximate split
+            allowances.fortnight1.odta = odtaPay / 2;
             allowances.fortnight2.odta = odtaPay / 2;
             
             let infringementPay = 0;
@@ -407,6 +453,8 @@
                     </div>
                 </div>
                 <hr>
+                <p><strong>Rank Detected:</strong> ${res.rank}</p>
+                <p><strong>Roster Period Type:</strong> <span style="font-weight: bold; color: ${res.periodType === 'Peak' ? '#C2410C' : '#16A34A'};">${res.periodType}</span></p>
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
                 <p><strong>Superannuation Contribution:</strong> $${res.superContribution.toFixed(2)}</p>
                 <hr>
