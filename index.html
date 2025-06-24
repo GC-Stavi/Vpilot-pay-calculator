@@ -34,7 +34,7 @@
         .total-pay { font-weight: bold; font-size: 1.2em; color: #1e293b; background-color: #f0f4f8; padding: 0.5em; border-radius: 8px; text-align: center; }
         .pay-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;}
         .pay-fortnight { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; }
-        .pay-fortnight h4 { margin-top: 0; }
+        .pay-fortnight h4 { margin-top: 0; font-size: 0.9em; }
         
         /* Number input for infringements */
         .manual-inputs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em; flex-wrap: wrap; gap: 20px; }
@@ -92,7 +92,7 @@
             VLEARN_CREDIT: 0.75,
             ODTA_HOURLY_RATE: 8.95,
             DUTY_RIG_RATIO: 1 / 2,
-            SUPER_GUARANTEE_RATE: 0.115, // Currently 11.5%
+            SUPER_GUARANTEE_RATE: 0.115,
             PRODUCTIVITY_RATES: { 'First Officer': 236.93 },
             CANCELLED_ACCOM_ALLOWANCE: 82.40,
             CANCELLED_CALLOUT_HOURS: 2,
@@ -133,6 +133,14 @@
             if (!timeStr || !timeStr.includes(':')) return 0;
             const [hours, minutes] = timeStr.split(':').map(Number);
             return hours + (minutes / 60);
+        };
+
+        const formatDateForDisplay = (date) => {
+            if (!date instanceof Date || isNaN(date)) return '';
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const year = String(date.getUTCFullYear()).slice(-2);
+            return `${day}/${month}/${year}`;
         };
 
         // --- CORE CALCULATION FUNCTIONS ---
@@ -319,8 +327,9 @@
             if (hoursOverTrigger > 0) {
                 productivityPay = hoursOverTrigger * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             }
-
-            const allowances = calculateAllowancesByFortnight(dayObjects, rank, parseDateFromRoster(rosterStartDateStr));
+            
+            const rosterStartDate = parseDateFromRoster(rosterStartDateStr);
+            const allowances = calculateAllowancesByFortnight(dayObjects, rank, rosterStartDate);
             const odtaPay = calculateOdta(dayObjects, 'MEL');
             allowances.fortnight1.odta = odtaPay / 2; // Approximate split
             allowances.fortnight2.odta = odtaPay / 2;
@@ -339,11 +348,21 @@
 
             const superableIncome = basePay + productivityPay + allowances.fortnight1.ddo + allowances.fortnight2.ddo + infringementPay + cancelledCalloutPay;
             const superContribution = superableIncome * EBA_CONSTANTS.SUPER_GUARANTEE_RATE;
+            
+            // Calculate date ranges for display
+            const fn1_end = new Date(rosterStartDate);
+            fn1_end.setUTCDate(fn1_end.getUTCDate() + 13);
+            const fn2_start = new Date(fn1_end);
+            fn2_start.setUTCDate(fn2_start.getUTCDate() + 1);
+            const fn2_end = new Date(fn2_start);
+            fn2_end.setUTCDate(fn2_end.getUTCDate() + 13);
 
             calculationResults = {
                 rank, basePay, productivityPay, infringementPay, allowances, odtaPay, cancelledCalloutPay, superContribution,
                 periodType: periodInfo.type, totalCredits, creditTrigger: periodInfo.trigger,
-                idtaPay: 0 
+                idtaPay: 0,
+                fortnight1DateRange: `${formatDateForDisplay(rosterStartDate)} - ${formatDateForDisplay(fn1_end)}`,
+                fortnight2DateRange: `${formatDateForDisplay(fn2_start)} - ${formatDateForDisplay(fn2_end)}`
             };
             
             updateModalContent();
@@ -368,13 +387,13 @@
              let summaryHTML = `
                 <div class="pay-split">
                     <div class="pay-fortnight">
-                        <h4>Little Pay (First Fortnight)</h4>
+                        <h4>Little Pay (${res.fortnight1DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
                         <p>Allowances: $${littlePayAllowances.toFixed(2)}</p>
                         <p><strong>Total: $${littlePay.toFixed(2)}</strong></p>
                     </div>
                      <div class="pay-fortnight">
-                        <h4>Big Pay (Second Fortnight)</h4>
+                        <h4>Big Pay (${res.fortnight2DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
                         <p>Allowances: $${bigPayAllowances.toFixed(2)}</p>
                         <p>Productivity Pay: $${res.productivityPay.toFixed(2)}</p>
