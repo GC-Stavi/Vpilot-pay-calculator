@@ -31,6 +31,7 @@
         }
         .modal-content h3 { margin-top: 0; }
         .modal-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1em 0; }
+        .total-pay { font-weight: bold; font-size: 1.1em; color: #1e293b; }
     </style>
 </head>
 <body>
@@ -74,10 +75,13 @@
             ANNUAL_SALARIES: { 'First Officer': 183137.50, 'Captain': 281750.00 },
             ROSTER_PERIOD_DAYS: 28,
             CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
-            VLEARN_CREDIT: 0.75
+            VLEARN_CREDIT: 0.75,
+            ODTA_HOURLY_RATE: 8.95, // Clause 45.2
+            PRODUCTIVITY_RATES: { 'First Officer': 236.93 }, // Clause 30.1, Table 5
+            CANCELLED_ACCOM_ALLOWANCE: 82.40, // Clause 32.1, Table 6
+            DDO_WORKED_MINIMUM_HOURS: 5, // Clause 37.2(a)
         };
         
-        // This global variable will store our calculation results
         let calculationResults = {};
 
         // --- MODAL VISIBILITY FUNCTIONS ---
@@ -92,18 +96,37 @@
         function hideResultsModal() {
             document.getElementById('resultsModal').style.display = 'none';
         }
+        
+        // --- HELPER FUNCTIONS ---
+        const parseDateFromRoster = (dateStr) => {
+            if (!dateStr || dateStr.length < 7) return null;
+            const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
+            const day = parseInt(dateStr.substring(0, 2), 10);
+            const month = months[dateStr.substring(2, 5).toUpperCase()];
+            const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
+            return new Date(Date.UTC(year, month, day));
+        };
+
+        const getDateTime = (dateStr, timeStr) => {
+            const date = parseDateFromRoster(dateStr);
+            if (date && timeStr && timeStr.includes(':')) {
+                const [hours, minutes] = timeStr.split(':').map(Number);
+                date.setUTCHours(hours, minutes);
+            }
+            return date;
+        };
+        
+        const parseTimeToHours = (timeStr) => {
+            if (!timeStr || !timeStr.includes(':')) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours + (minutes / 60);
+        };
 
         // --- CALCULATION FUNCTIONS ---
 
         function getPeriodTypeAndTrigger(rosterStartDateStr) {
-            const parseDate = (dateStr) => {
-                const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
-                const day = parseInt(dateStr.substring(0, 2), 10);
-                const month = months[dateStr.substring(2, 5).toUpperCase()];
-                const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
-                return new Date(Date.UTC(year, month, day)); // Use UTC to avoid timezone issues
-            };
-            const rosterStartDate = parseDate(rosterStartDateStr);
+            const rosterStartDate = parseDateFromRoster(rosterStartDateStr);
+            if (!rosterStartDate) return null;
             for (const period of ROSTER_PERIODS) {
                 const periodStart = new Date(period.start);
                 const periodEnd = new Date(period.end);
@@ -121,36 +144,150 @@
             return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
         
-        /**
-         * Calculates total accrued credit hours from an array of roster data lines.
-         * @param {string[]} dataLines - An array of strings, where each string is a data row from the roster.
-         * @returns {number} The total credit hours.
-         */
         function calculateTotalCreditHours(dataLines) {
-            let totalMinutes = 0;
-            // The Flt Time column is the 13th one, which is at index 12 in a zero-based array
+            let totalFlightHours = 0;
             const fltTimeIndex = 13; 
-
             for (const line of dataLines) {
                 const columns = line.split('|').map(c => c.trim());
-                if (columns.length <= fltTimeIndex) continue; // Skip malformed lines
-
+                if (columns.length <= fltTimeIndex) continue;
                 const timeStr = columns[fltTimeIndex];
-                if (timeStr && timeStr.includes(':')) {
-                    const [hours, minutes] = timeStr.split(':').map(Number);
-                    totalMinutes += (hours * 60) + minutes;
+                totalFlightHours += parseTimeToHours(timeStr);
+            }
+            return totalFlightHours + EBA_CONSTANTS.VLEARN_CREDIT;
+        }
+
+        function calculateOdta(dataLines) {
+            let totalOdtaPay = 0;
+            let tripActive = false;
+            let tripStartDetails = null;
+        
+            const dateIndex = 1;
+            const rptIndex = 8;
+            const signOffIndex = 11;
+            const hotelIndex = 14;
+        
+            for (let i = 0; i < dataLines.length; i++) {
+                const columns = dataLines[i].split('|').map(c => c.trim());
+                let currentDate = columns[dateIndex];
+        
+                // If the date column is blank, use the date from the previous row
+                if (!currentDate) {
+                    let prevIndex = i - 1;
+                    while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[dateIndex].trim()) {
+                        prevIndex--;
+                    }
+                    if (prevIndex >= 0) {
+                        currentDate = dataLines[prevIndex].split('|')[dateIndex].trim();
+                    }
+                }
+        
+                const hasOvernight = columns.length > hotelIndex && columns[hotelIndex].trim() !== '';
+        
+                if (!tripActive && hasOvernight) {
+                    tripActive = true;
+                    tripStartDetails = {
+                        date: currentDate,
+                        time: columns[rptIndex]
+                    };
+                }
+        
+                if (tripActive) {
+                    const isLastDayOfTrip = (i + 1 === dataLines.length) || (dataLines[i + 1].split('|')[hotelIndex].trim() === '');
+                    if (isLastDayOfTrip) {
+                        tripActive = false;
+                        const tripEndTime = columns[signOffIndex];
+                        if (tripStartDetails && tripEndTime) {
+                            const startDateTime = getDateTime(tripStartDetails.date, tripStartDetails.time);
+                            const endDateTime = getDateTime(currentDate, tripEndTime);
+                            if (startDateTime && endDateTime && endDateTime > startDateTime) {
+                                const durationMs = endDateTime - startDateTime;
+                                const durationHours = durationMs / (1000 * 60 * 60);
+                                totalOdtaPay += durationHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
+                            }
+                        }
+                        tripStartDetails = null;
+                    }
                 }
             }
-            const totalHours = totalMinutes / 60;
-            return totalHours + EBA_CONSTANTS.VLEARN_CREDIT;
+            return totalOdtaPay;
         }
         
         /**
-         * The main function to orchestrate the entire pay calculation process.
-         * This now populates a global object instead of directly updating the UI.
+         * Calculates special allowances like DDO Worked Pay and Cancelled Accom.
+         * @param {string[]} dataLines - An array of strings representing roster data.
+         * @param {string} rank - The rank of the pilot.
+         * @returns {object} An object with `ddoPay` and `cancelledAccomPay`.
+         */
+        function calculateSpecialAllowances(dataLines, rank) {
+            let ddoPay = 0;
+            let cancelledAccomPay = 0;
+
+            const dutyIndex = 6;
+            const hotelIndex = 14;
+            const fltTimeIndex = 13;
+            
+            const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+
+            // Calculate BNEO allowance
+            for (const line of dataLines) {
+                const columns = line.split('|').map(c => c.trim());
+                if (columns.length > hotelIndex && columns[hotelIndex].toUpperCase() === 'BNEO') {
+                    cancelledAccomPay += EBA_CONSTANTS.CANCELLED_ACCOM_ALLOWANCE;
+                }
+            }
+
+            // Calculate DDO Worked Pay
+            const ddoDays = new Set(); // Use a Set to only process each DDO day once
+            for(const line of dataLines) {
+                 const columns = line.split('|').map(c => c.trim());
+                 if (columns.length > dutyIndex && columns[dutyIndex].startsWith('$')) {
+                     // Get the date for this line, carrying it down from previous rows if blank
+                    let dateForLine = columns[1].trim();
+                    if (!dateForLine) {
+                        let prevIndex = dataLines.indexOf(line) - 1;
+                        while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[1].trim()) {
+                            prevIndex--;
+                        }
+                         if(prevIndex >= 0) dateForLine = dataLines[prevIndex].split('|')[1].trim();
+                    }
+                    if (dateForLine) ddoDays.add(dateForLine);
+                 }
+            }
+
+            // Now calculate payment for each unique DDO day
+            ddoDays.forEach(day => {
+                let dailyFlightHours = 0;
+                for(const line of dataLines) {
+                    const columns = line.split('|').map(c => c.trim());
+                    // Find the date for the current row
+                    let dateForLine = columns[1].trim();
+                     if (!dateForLine) {
+                        let prevIndex = dataLines.indexOf(line) - 1;
+                        while(prevIndex >= 0 && !dataLines[prevIndex].split('|')[1].trim()) {
+                            prevIndex--;
+                        }
+                         if(prevIndex >= 0) dateForLine = dataLines[prevIndex].split('|')[1].trim();
+                    }
+
+                    if (dateForLine === day) {
+                         const timeStr = columns[fltTimeIndex];
+                         dailyFlightHours += parseTimeToHours(timeStr);
+                    }
+                }
+
+                const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
+                ddoPay += payableHours * productivityRate;
+            });
+
+
+            return { ddoPay, cancelledAccomPay };
+        }
+
+        /**
+         * Main orchestration function.
          */
         function runPayCalculation() {
-            calculationResults = {}; // Reset results
+            calculationResults = {};
             const resultsOutput = document.getElementById('resultsOutput');
             resultsOutput.innerHTML = '<p>Calculating...</p>';
             
@@ -160,25 +297,17 @@
                 return;
             }
 
-            // --- Robust Parsing Logic ---
             const allLines = rosterData.trim().split('\n');
-            // Filter out headers, titles, and formatting lines to get only data rows
-            const dataLines = allLines.filter(line => 
-                line.trim().startsWith('|') &&       // Must be part of the markdown table
-                !line.includes('---') &&              // Not a separator line
-                !line.includes('Start Date')          // Not the header row
-            );
+            const dataLines = allLines.filter(line => line.trim().startsWith('|') && !line.includes('---') && !line.includes('Start Date'));
             
             if (dataLines.length === 0) {
                 resultsOutput.innerHTML = '<p>Error: No valid data rows found in the pasted text.</p>';
-                // Don't alert here, just show message in modal
                 return;
             }
-
-            // The first column is empty in markdown, so start date is in the second column (index 1)
+            
             const rosterStartDate = dataLines[0].split('|')[1].trim();
-
             const periodInfo = getPeriodTypeAndTrigger(rosterStartDate);
+
             if (!periodInfo) {
                 resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDate}.</p>`;
                 alert(`Error: The roster start date (${rosterStartDate}) is outside known date ranges.`);
@@ -187,25 +316,20 @@
 
             const rank = 'First Officer';
             const basePay = calculateBasePayForPeriod(rank);
-            // Pass the pre-filtered data lines to the calculation function
-            const totalCreditsResult = calculateTotalCreditHours(dataLines);
-            
-            let productivityPay = 0;
-            const hoursOverTrigger = totalCreditsResult - periodInfo.trigger;
+            const totalCredits = calculateTotalCreditHours(dataLines);
+            const odtaPay = calculateOdta(dataLines);
+            const { ddoPay, cancelledAccomPay } = calculateSpecialAllowances(dataLines, rank);
+            const hoursOverTrigger = totalCredits - periodInfo.trigger;
 
-            // Store all results in the global object
             calculationResults = {
-                rank: rank,
-                rosterStartDate: rosterStartDate,
+                rank, rosterStartDate, basePay, odtaPay, ddoPay, cancelledAccomPay,
                 periodType: periodInfo.type,
-                basePay: basePay,
-                totalCredits: totalCreditsResult,
+                totalCredits,
                 creditTrigger: periodInfo.trigger,
                 hoursOverTrigger: hoursOverTrigger > 0 ? hoursOverTrigger : 0,
-                productivityPay: productivityPay // will be updated later
+                productivityPay: 0, // Placeholder
             };
-
-            // Update the modal content so it's ready when the button is clicked
+            
             updateModalContent();
         }
 
@@ -214,30 +338,35 @@
          */
         function updateModalContent() {
              const resultsOutput = document.getElementById('resultsOutput');
-             const res = calculationResults; // shorthand
+             const res = calculationResults;
 
-             if (!res.basePay) { // Check if results are valid
+             if (!res.basePay) {
                  resultsOutput.innerHTML = '<p>Could not calculate. Please check the pasted data format.</p>';
                  return;
              }
+             
+             const totalPay = res.basePay + res.odtaPay + res.ddoPay + res.cancelledAccomPay + res.productivityPay;
 
              let summaryHTML = `
                 <p><strong>Rank:</strong> ${res.rank}</p>
-                <p><strong>Roster Period:</strong> ${res.rosterStartDate}</p>
                 <p><strong>Period Type:</strong> <span style="font-weight: bold; color: ${res.periodType === 'Peak' ? '#C2410C' : '#16A34A'};">${res.periodType}</span></p>
                 <hr>
                 <p><strong>Base Pay for Period:</strong> $${res.basePay.toFixed(2)}</p>
+                <p><strong>Overnight Allowance (ODTA):</strong> $${res.odtaPay.toFixed(2)}</p>
+                <p><strong>DDO Worked Payment:</strong> $${res.ddoPay.toFixed(2)}</p>
+                <p><strong>Cancelled Accom Allowance:</strong> $${res.cancelledAccomPay.toFixed(2)}</p>
                 <hr>
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} hours</p>
                 <p><strong>Credit Hour Trigger:</strong> ${res.creditTrigger.toFixed(2)} hours</p>
             `;
 
             if (res.hoursOverTrigger > 0) {
-                summaryHTML += `<p><strong>Hours Over Trigger:</strong> ${res.hoursOverTrigger.toFixed(2)} hours</p>`;
                 summaryHTML += `<p><strong>Productivity Pay Due:</strong> (Calculation to be added)</p>`;
             } else {
                  summaryHTML += `<p><strong>Productivity Pay Due:</strong> $0.00 <em style="font-size: 0.9em;">(Credits are below the trigger)</em></p>`;
             }
+            
+            summaryHTML += `<hr><p class="total-pay">Estimated Total Pay: $${totalPay.toFixed(2)}</p>`;
             
             resultsOutput.innerHTML = summaryHTML;
         }
