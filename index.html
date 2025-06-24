@@ -49,6 +49,13 @@
             font-size: 1em;
         }
 
+        /* Responsive styling for smaller screens */
+        @media (max-width: 640px) {
+            .pay-split {
+                grid-template-columns: 1fr; /* Stack the columns on top of each other */
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -138,6 +145,13 @@
             document.getElementById('resultsModal').style.display = 'flex';
         }
         function hideResultsModal() { document.getElementById('resultsModal').style.display = 'none'; }
+        
+        // Add event listener to close modal when clicking outside the content
+        document.getElementById('resultsModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                hideResultsModal();
+            }
+        });
         
         const parseDateFromRoster = (dateStr) => {
             if (!dateStr || dateStr.length < 7) return null;
