@@ -251,62 +251,24 @@
             });
             return totalCredits + EBA_CONSTANTS.VLEARN_CREDIT;
         }
-
-        function calculateOdta(dayObjects, homeBase) {
-            let totalOdtaHours = 0;
-            let tripActive = false;
-            let tripStartDate = null;
-            let tripSignOnTime = null;
-
-            dayObjects.forEach((day, index) => {
-                const isOvernightDay = day.duties.some(d => d.hotel && d.hotel !== '');
-                
-                if (!tripActive && isOvernightDay) {
-                    tripActive = true;
-                    tripStartDate = day.date;
-                    tripSignOnTime = day.duties[0]?.rpt || day.duties[0]?.std;
-                }
-
-                if (tripActive) {
-                    const nextDay = dayObjects[index + 1];
-                    const isEndOfTrip = !nextDay || (nextDay.sector === homeBase && ['BLANK', 'DDO', 'PDO', 'LWOP'].includes(nextDay.duties[0]?.duty));
-                    
-                    if (isEndOfTrip) {
-                        tripActive = false;
-                        const lastDuty = day.duties[day.duties.length - 1];
-                        const tripSignOffTime = lastDuty.signOff;
-
-                        if (tripStartDate && tripSignOnTime && tripSignOffTime) {
-                            let endDate = day.date;
-                            if (parseTimeToHours(tripSignOffTime) < parseTimeToHours(tripSignOnTime)) {
-                                let tempDate = new Date(day.date);
-                                tempDate.setUTCDate(tempDate.getUTCDate() + 1);
-                                endDate = tempDate;
-                            }
-                            const startDateTime = getDateTime(tripStartDate, tripSignOnTime);
-                            const endDateTime = getDateTime(endDate, tripSignOffTime);
-                            if (endDateTime > startDateTime) {
-                                totalOdtaHours += (endDateTime - startDateTime) / (1000 * 60 * 60);
-                            }
-                        }
-                    }
-                }
-            });
-            return totalOdtaHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
-        }
         
         function calculateAllowancesByFortnight(dayObjects, rank, rosterStartDate) {
             let allowances = {
-                fortnight1: { ddo: 0, bneo: 0 },
-                fortnight2: { ddo: 0, bneo: 0 }
+                fortnight1: { ddo: 0, bneo: 0, odta: 0 },
+                fortnight2: { ddo: 0, bneo: 0, odta: 0 }
             };
             const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             if(!productivityRate) return allowances;
 
             const fortnightEndDate = new Date(rosterStartDate);
             fortnightEndDate.setUTCDate(fortnightEndDate.getUTCDate() + 13);
+            
+            let tripActive = false;
+            let tripStartDate = null;
+            let tripSignOnTime = null;
+            const homeBase = 'MEL';
 
-            dayObjects.forEach(day => {
+            dayObjects.forEach((day, index) => {
                 const fortnight = (day.date <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
                 let dailyFlightHours = 0;
 
@@ -316,11 +278,34 @@
                     }
                     dailyFlightHours += parseTimeToHours(duty.fltTime);
                 });
-                
-                if (day.duties.some(d => d.duty.startsWith('$'))) {
-                    if (dailyFlightHours > 0) {
-                         const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
-                         allowances[fortnight].ddo += payableHours * productivityRate;
+                if (day.duties.some(d => d.duty.startsWith('$')) && dailyFlightHours > 0) {
+                     const payableHours = Math.max(dailyFlightHours, EBA_CONSTANTS.DDO_WORKED_MINIMUM_HOURS);
+                     allowances[fortnight].ddo += payableHours * productivityRate;
+                }
+
+                const isOvernightDay = day.duties.some(d => d.hotel && d.hotel !== '');
+                if (!tripActive && isOvernightDay) {
+                    tripActive = true;
+                    tripStartDate = day.date;
+                    tripSignOnTime = day.duties[0]?.rpt || day.duties[0]?.std;
+                }
+                if (tripActive) {
+                    const nextDay = dayObjects[index + 1];
+                    const isEndOfTrip = !nextDay || (nextDay.sector === homeBase && ['BLANK', 'DDO', 'PDO', 'LWOP'].includes(nextDay.duties[0]?.duty));
+                    if (isEndOfTrip) {
+                        tripActive = false;
+                        const tripEndDate = day.date;
+                        const tripSignOffTime = day.duties[day.duties.length - 1].signOff;
+
+                        if (tripStartDate && tripSignOnTime && tripSignOffTime) {
+                            const startDateTime = getDateTime(tripStartDate, tripSignOnTime);
+                            const endDateTime = getDateTime(tripEndDate, tripSignOffTime);
+                            if (endDateTime > startDateTime) {
+                                const durationHours = (endDateTime - startDateTime) / (1000 * 60 * 60);
+                                const tripFortnight = (tripStartDate <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
+                                allowances[tripFortnight].odta += durationHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
+                            }
+                        }
                     }
                 }
             });
@@ -332,11 +317,11 @@
                 for (const duty of day.duties) {
                     const pairingDutyCode = duty.pairingDuty?.toUpperCase();
                     if (pairingDutyCode && RANK_ALIASES[pairingDutyCode]) {
-                        return RANK_ALIASES[pairingDutyCode]; // Return the full rank name
+                        return RANK_ALIASES[pairingDutyCode];
                     }
                 }
             }
-            return null; // Return null if no known rank is found
+            return null;
         }
 
         // --- DATA PRE-PROCESSING ---
@@ -416,9 +401,6 @@
             
             const rosterStartDate = parseDateFromRoster(rosterStartDateStr);
             const allowances = calculateAllowancesByFortnight(dayObjects, rank, rosterStartDate);
-            const odtaPay = calculateOdta(dayObjects, 'MEL');
-            allowances.fortnight1.odta = odtaPay / 2;
-            allowances.fortnight2.odta = odtaPay / 2;
             
             let infringementPay = 0;
             const infringementCount = parseInt(document.getElementById('infringementInput').value, 10);
@@ -441,13 +423,18 @@
             fn2_start.setUTCDate(fn2_start.getUTCDate() + 1);
             const fn2_end = new Date(fn2_start);
             fn2_end.setUTCDate(fn2_end.getUTCDate() + 13);
+            
+            const currentDate = new Date();
+            currentDate.setUTCHours(0,0,0,0);
+            const isEstimate = fn2_end >= currentDate;
 
             calculationResults = {
-                rank, basePay, productivityPay, infringementPay, allowances, odtaPay, cancelledCalloutPay, superContribution,
+                rank, basePay, productivityPay, infringementPay, allowances, cancelledCalloutPay, superContribution,
                 periodType: periodInfo.type, totalCredits, creditTrigger: periodInfo.trigger,
                 idtaPay: 0,
                 fortnight1DateRange: `${formatDateForDisplay(rosterStartDate)} - ${formatDateForDisplay(fn1_end)}`,
-                fortnight2DateRange: `${formatDateForDisplay(fn2_start)} - ${formatDateForDisplay(fn2_end)}`
+                fortnight2DateRange: `${formatDateForDisplay(fn2_start)} - ${formatDateForDisplay(fn2_end)}`,
+                isEstimate
             };
             
             updateModalContent();
@@ -465,6 +452,7 @@
              }
              
              modalTitle.textContent = `Pay Calculation Breakdown - ${res.rank}`;
+             const estLabel = res.isEstimate ? ' (Est.)' : ' (Act.)';
 
              const littlePayAllowances = res.allowances.fortnight1.odta + res.allowances.fortnight1.ddo + res.allowances.fortnight1.bneo;
              const littlePay = (res.basePay / 2) + littlePayAllowances;
@@ -479,7 +467,7 @@
                     <div class="pay-fortnight">
                         <h4>Little Pay (${res.fortnight1DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
-                        <p>ODTA (Est.): $${res.allowances.fortnight1.odta.toFixed(2)}</p>
+                        <p>ODTA${estLabel}: $${res.allowances.fortnight1.odta.toFixed(2)}</p>
                         <p>DDO Worked: $${res.allowances.fortnight1.ddo.toFixed(2)}</p>
                         <p>Cancelled Accom: $${res.allowances.fortnight1.bneo.toFixed(2)}</p>
                         <p><strong>Total: $${littlePay.toFixed(2)}</strong></p>
@@ -487,7 +475,7 @@
                      <div class="pay-fortnight">
                         <h4>Big Pay (${res.fortnight2DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
-                        <p>ODTA (Est.): $${res.allowances.fortnight2.odta.toFixed(2)}</p>
+                        <p>ODTA${estLabel}: $${res.allowances.fortnight2.odta.toFixed(2)}</p>
                         <p>DDO Worked: $${res.allowances.fortnight2.ddo.toFixed(2)}</p>
                         <p>Cancelled Accom: $${res.allowances.fortnight2.bneo.toFixed(2)}</p>
                         <p>Productivity Pay: $${res.productivityPay.toFixed(2)}</p>
@@ -501,7 +489,7 @@
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
                 <p><strong>Superannuation Contribution:</strong> $${res.superContribution.toFixed(2)}</p>
                 <hr>
-                <p class="total-pay">Estimated Gross Pay for Period: $${totalPay.toFixed(2)}</p>
+                <p class="total-pay">${res.isEstimate ? 'Estimated' : 'Actual'} Gross Pay for Period: $${totalPay.toFixed(2)}</p>
             `;
             
             resultsOutput.innerHTML = summaryHTML;
