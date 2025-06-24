@@ -37,6 +37,7 @@
         .pay-fortnight h4 { margin-top: 0; }
         
         /* Number input for infringements */
+        .manual-inputs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em; flex-wrap: wrap; gap: 20px; }
         .infringement-control { display: flex; align-items: center; gap: 10px; }
         .infringement-control input[type="number"] {
             width: 60px;
@@ -51,26 +52,26 @@
 <body>
 
     <main class="container">
-        <!-- The user will paste the full roster table text here -->
         <textarea id="rosterInput" placeholder="Paste your full roster table text here..." oninput="runPayCalculation()"></textarea>
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+        <div class="manual-inputs">
              <div class="infringement-control">
                 <label for="infringementInput">DDO Infringements:</label>
                 <input type="number" id="infringementInput" value="0" min="0" onchange="runPayCalculation()">
              </div>
-            <!-- This button will now show the modal with the pre-calculated results -->
+             <div class="infringement-control">
+                <label for="cancelledCalloutInput">Cancelled Callouts:</label>
+                <input type="number" id="cancelledCalloutInput" value="0" min="0" onchange="runPayCalculation()">
+             </div>
             <button onclick="showResultsModal()" class="primary-button">View Pay Breakdown</button>
         </div>
     </main>
     
-    <!-- Modal for displaying results -->
     <div id="resultsModal" class="modal-overlay">
         <div class="modal-content">
             <button class="modal-close-button" onclick="hideResultsModal()">&times;</button>
             <h3>Pay Calculation Breakdown</h3>
             <div id="resultsOutput">
-                <!-- Calculation results will be populated here -->
                 <p>Paste roster data to begin calculation.</p>
             </div>
         </div>
@@ -90,8 +91,11 @@
             CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
             VLEARN_CREDIT: 0.75,
             ODTA_HOURLY_RATE: 8.95,
+            DUTY_RIG_RATIO: 1 / 2,
+            SUPER_GUARANTEE_RATE: 0.115, // Currently 11.5%
             PRODUCTIVITY_RATES: { 'First Officer': 236.93 },
             CANCELLED_ACCOM_ALLOWANCE: 82.40,
+            CANCELLED_CALLOUT_HOURS: 2,
             DDO_WORKED_MINIMUM_HOURS: 5,
             DDO_INFRINGEMENT_HOURS: 5
         };
@@ -115,14 +119,16 @@
             const year = 2000 + parseInt(dateStr.substring(5, 7), 10);
             return new Date(Date.UTC(year, month, day));
         };
+        
         const getDateTime = (dateObj, timeStr) => {
-            const newDate = new Date(dateObj); // Clone the date object
+            const newDate = new Date(dateObj); 
             if (timeStr && timeStr.includes(':')) {
                 const [hours, minutes] = timeStr.split(':').map(Number);
                 newDate.setUTCHours(hours, minutes, 0, 0);
             }
             return newDate;
         };
+        
         const parseTimeToHours = (timeStr) => {
             if (!timeStr || !timeStr.includes(':')) return 0;
             const [hours, minutes] = timeStr.split(':').map(Number);
@@ -142,28 +148,35 @@
             }
             return null;
         }
+        
         function calculateBasePayForPeriod(rank) {
             const annualSalary = EBA_CONSTANTS.ANNUAL_SALARIES[rank];
             if (!annualSalary) return 0;
             const dailyRate = annualSalary / 365;
             return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
         }
+        
         function calculateTotalCreditHours(dayObjects) {
-            let totalFlightHours = 0;
+            let totalCredits = 0;
             dayObjects.forEach(day => {
+                let dailyFlightTimeHours = 0;
+                let hasActiveDuty = false;
                 day.duties.forEach(duty => {
-                    totalFlightHours += parseTimeToHours(duty.fltTime);
+                    dailyFlightTimeHours += parseTimeToHours(duty.fltTime);
+                    if(duty.duty && !['BLANK', 'DDO', 'PDO', 'LWOP'].includes(duty.duty.toUpperCase())) {
+                        hasActiveDuty = true;
+                    }
                 });
+                
+                if (hasActiveDuty) {
+                    const dutyTimeHours = parseTimeToHours(day.duties[0]?.dutyTime);
+                    const dutyRigCredits = dutyTimeHours * EBA_CONSTANTS.DUTY_RIG_RATIO;
+                    totalCredits += Math.max(dailyFlightTimeHours, dutyRigCredits);
+                }
             });
-            return totalFlightHours + EBA_CONSTANTS.VLEARN_CREDIT;
+            return totalCredits + EBA_CONSTANTS.VLEARN_CREDIT;
         }
 
-        /**
-         * Calculates ODTA based on trips away from home base.
-         * @param {Array} dayObjects - The pre-processed roster data.
-         * @param {string} homeBase - The pilot's home base (e.g., 'MEL').
-         * @returns {number} Total ODTA pay.
-         */
         function calculateOdta(dayObjects, homeBase) {
             let totalOdtaHours = 0;
             let tripActive = false;
@@ -172,10 +185,8 @@
 
             dayObjects.forEach((day, index) => {
                 const isOvernightDay = day.duties.some(d => d.hotel && d.hotel !== '');
-                const isDayOffAtHome = day.sector === homeBase && ['BLANK', 'DDO', 'PDO'].includes(day.duties[0]?.duty);
-
+                
                 if (!tripActive && isOvernightDay) {
-                    // Start of a new trip
                     tripActive = true;
                     tripStartDate = day.date;
                     tripSignOnTime = day.duties[0]?.rpt || day.duties[0]?.std;
@@ -183,35 +194,29 @@
 
                 if (tripActive) {
                     const nextDay = dayObjects[index + 1];
-                    const isEndOfTrip = !nextDay || (nextDay.sector === homeBase && ['BLANK', 'DDO', 'PDO'].includes(nextDay.duties[0]?.duty));
-
+                    const isEndOfTrip = !nextDay || (nextDay.sector === homeBase && ['BLANK', 'DDO', 'PDO', 'LWOP'].includes(nextDay.duties[0]?.duty));
+                    
                     if (isEndOfTrip) {
                         tripActive = false;
                         const lastDuty = day.duties[day.duties.length - 1];
                         const tripSignOffTime = lastDuty.signOff;
 
                         if (tripStartDate && tripSignOnTime && tripSignOffTime) {
-                            let endDay = day;
-                            // Sign off can be on the next day
-                            if (parseTimeToHours(tripSignOffTime) < parseTimeToHours(tripSignOnTime) && day.duties.length === 1 && nextDay) {
-                                // Simple check for overnight signoff
+                            let endDate = day.date;
+                            if (parseTimeToHours(tripSignOffTime) < parseTimeToHours(tripSignOnTime)) {
                                 let tempDate = new Date(day.date);
-                                tempDate.setDate(tempDate.getDate() + 1);
-                                endDay = { date: tempDate };
+                                tempDate.setUTCDate(tempDate.getUTCDate() + 1);
+                                endDate = tempDate;
                             }
-
                             const startDateTime = getDateTime(tripStartDate, tripSignOnTime);
-                            const endDateTime = getDateTime(endDay.date, tripSignOffTime);
-
+                            const endDateTime = getDateTime(endDate, tripSignOffTime);
                             if (endDateTime > startDateTime) {
-                                const durationMs = endDateTime - startDateTime;
-                                totalOdtaHours += durationMs / (1000 * 60 * 60);
+                                totalOdtaHours += (endDateTime - startDateTime) / (1000 * 60 * 60);
                             }
                         }
                     }
                 }
             });
-
             return totalOdtaHours * EBA_CONSTANTS.ODTA_HOURLY_RATE;
         }
         
@@ -222,7 +227,7 @@
             };
             const productivityRate = EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             const fortnightEndDate = new Date(rosterStartDate);
-            fortnightEndDate.setDate(fortnightEndDate.getDate() + 13);
+            fortnightEndDate.setUTCDate(fortnightEndDate.getUTCDate() + 13);
 
             dayObjects.forEach(day => {
                 const fortnight = (day.date <= fortnightEndDate) ? 'fortnight1' : 'fortnight2';
@@ -254,7 +259,7 @@
                 const cols = line.split('|').map(c => c.trim());
                 const dateStr = cols[1];
 
-                if (dateStr) { // New day starts
+                if (dateStr) { 
                     if (currentDay) dayObjects.push(currentDay);
                     currentDay = {
                         date: parseDateFromRoster(dateStr),
@@ -271,11 +276,10 @@
                     });
                 }
             });
-            if (currentDay) dayObjects.push(currentDay); // Add the last day
+            if (currentDay) dayObjects.push(currentDay);
 
             return dayObjects;
         }
-
 
         // --- MAIN ORCHESTRATION ---
         function runPayCalculation() {
@@ -327,9 +331,19 @@
                 infringementPay = infringementCount * EBA_CONSTANTS.DDO_INFRINGEMENT_HOURS * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             }
 
+            let cancelledCalloutPay = 0;
+            const calloutCount = parseInt(document.getElementById('cancelledCalloutInput').value, 10);
+            if(calloutCount > 0) {
+                cancelledCalloutPay = calloutCount * EBA_CONSTANTS.CANCELLED_CALLOUT_HOURS * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
+            }
+
+            const superableIncome = basePay + productivityPay + allowances.fortnight1.ddo + allowances.fortnight2.ddo + infringementPay + cancelledCalloutPay;
+            const superContribution = superableIncome * EBA_CONSTANTS.SUPER_GUARANTEE_RATE;
+
             calculationResults = {
-                rank, basePay, productivityPay, infringementPay, allowances, odtaPay,
+                rank, basePay, productivityPay, infringementPay, allowances, odtaPay, cancelledCalloutPay, superContribution,
                 periodType: periodInfo.type, totalCredits, creditTrigger: periodInfo.trigger,
+                idtaPay: 0 
             };
             
             updateModalContent();
@@ -347,7 +361,7 @@
              const littlePay = (res.basePay / 2) + littlePayAllowances;
 
              const bigPayAllowances = res.allowances.fortnight2.odta + res.allowances.fortnight2.ddo + res.allowances.fortnight2.bneo;
-             const bigPay = (res.basePay / 2) + bigPayAllowances + res.productivityPay + res.infringementPay;
+             const bigPay = (res.basePay / 2) + bigPayAllowances + res.productivityPay + res.infringementPay + res.cancelledCalloutPay;
              
              const totalPay = littlePay + bigPay;
 
@@ -365,14 +379,15 @@
                         <p>Allowances: $${bigPayAllowances.toFixed(2)}</p>
                         <p>Productivity Pay: $${res.productivityPay.toFixed(2)}</p>
                         <p>DDO Infringement: $${res.infringementPay.toFixed(2)}</p>
+                        <p>Cancelled Callout: $${res.cancelledCalloutPay.toFixed(2)}</p>
                         <p><strong>Total: $${bigPay.toFixed(2)}</strong></p>
                     </div>
                 </div>
                 <hr>
                 <p><strong>Total Accrued Credits:</strong> ${res.totalCredits.toFixed(2)} (Trigger: ${res.creditTrigger})</p>
-                 <p><strong>Overnight Allowance (ODTA):</strong> $${res.odtaPay.toFixed(2)}</p>
+                <p><strong>Superannuation Contribution:</strong> $${res.superContribution.toFixed(2)}</p>
                 <hr>
-                <p class="total-pay">Estimated Total Pay for Period: $${totalPay.toFixed(2)}</p>
+                <p class="total-pay">Estimated Gross Pay for Period: $${totalPay.toFixed(2)}</p>
             `;
             
             resultsOutput.innerHTML = summaryHTML;
