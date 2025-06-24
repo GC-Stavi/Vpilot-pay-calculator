@@ -7,17 +7,23 @@
     <style>
         /* All CSS from the original skeleton remains the same */
         body { font-family: 'Inter', sans-serif; margin: 0; background: linear-gradient(to bottom right, #f0f4f8, #e0e7ee); color: #334155; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        .top-banner { width: 100%; background-color: #111; padding: 0.8em 20px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.25); z-index: 100; color: #fff; }
+        .top-banner h1 { font-size: 1.8em; letter-spacing: 0.25em; text-transform: uppercase; margin: 0; }
+        header { width: 100%; max-width: 1000px; text-align: center; margin: 2rem auto 0; padding: 0 20px; }
+        header p { font-size: 1.1em; color: #64748b; margin-bottom: 20px; }
+        header hr { max-width: 250px; margin: 20px auto 30px auto; border: 0; border-top: 2px solid #cbd5e1; }
+        .top-controls { position: absolute; top: 15px; right: 20px; z-index: 110; }
         .container { max-width: 1000px; width: 95%; margin: 1rem auto; background: #ffffff; padding: 2em; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); border-radius: 12px; }
         textarea { width: 100%; height: 250px; font-family: monospace; padding: 1em; border: 1px solid #cbd5e1; border-radius: 8px; resize: vertical; font-size: 14px; margin-bottom: 1em; }
         button { padding: 0.8em 1.6em; font-size: 1em; font-weight: 600; cursor: pointer; border-radius: 8px; border: 1px solid #cbd5e1; background: #e2e8f0; color: #475569; transition: all 0.2s ease; }
         button.primary-button { background: linear-gradient(to right, #6366f1, #8b5cf6); border-color: #6366f1; color: #ffffff; }
+        .dark-toggle-btn { background: #fff; color: #475569; padding: 0.7em 1.4em; border: none; }
         
         /* Modal Styles */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.6);
-            display: none; /* Hidden by default */
-            justify-content: center; align-items: center; z-index: 1000;
+            display: none; justify-content: center; align-items: center; z-index: 1000;
         }
         .modal-content {
             background-color: #ffffff; padding: 30px; border-radius: 12px;
@@ -51,14 +57,37 @@
 
         /* Responsive styling for smaller screens */
         @media (max-width: 640px) {
-            .pay-split {
-                grid-template-columns: 1fr; /* Stack the columns on top of each other */
-            }
+            .pay-split { grid-template-columns: 1fr; }
+            .manual-inputs { justify-content: center; }
         }
+
+        /* --- DARK MODE STYLES --- */
+        body.dark-mode { background: linear-gradient(to bottom right, #1e293b, #0f172a); color: #e2e8f0; }
+        body.dark-mode .container { background: #1e293b; border-color: #334155; }
+        body.dark-mode header p { color: #a0aec0; }
+        body.dark-mode header hr { border-top-color: #475569; }
+        body.dark-mode textarea { background: #2d3748; color: #f1f5f9; border-color: #4a5568; }
+        body.dark-mode .dark-toggle-btn { background: #334155; color: #e2e8f0; }
+        body.dark-mode .modal-content { background-color: #1e293b; color: #e2e8f0; }
+        body.dark-mode .modal-close-button { color: #a0aec0; }
+        body.dark-mode .pay-fortnight { border-color: #334155; }
+        body.dark-mode .total-pay { background-color: #2d3748; color: #f1f5f9; }
+        body.dark-mode hr { border-top-color: #334155; }
+
 
     </style>
 </head>
 <body>
+    <div class="top-banner">
+        <h1>ROSTER PAY CALCULATOR</h1>
+    </div>
+    <div class="top-controls">
+        <button class="dark-toggle-btn" onclick="toggleDarkMode()" id="darkModeBtn">Dark Mode</button>
+    </div>
+    <header>
+        <p>A tool to estimate pilot pay based on a pasted roster and the 2024 EBA.</p>
+        <hr>
+    </header>
 
     <main class="container">
         <textarea id="rosterInput" placeholder="Paste your full roster table text here..." oninput="runPayCalculation()"></textarea>
@@ -87,6 +116,24 @@
     </div>
     
     <script>
+        // --- DARK MODE LOGIC ---
+        function toggleDarkMode() {
+            const body = document.body;
+            const btn = document.getElementById('darkModeBtn');
+            const isDark = body.classList.toggle('dark-mode');
+            btn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+            localStorage.setItem('darkMode', isDark ? 'dark' : 'light');
+        }
+
+        window.onload = function() {
+            const savedMode = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedMode === 'dark' || (!savedMode && prefersDark)) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('darkModeBtn').textContent = 'Light Mode';
+            }
+        };
+
         // --- DATA & EBA RULES ---
         const ROSTER_PERIODS = [
             { start: '2024-12-23', end: '2025-01-19', type: 'Peak' }, { start: '2025-01-20', end: '2025-02-16', type: 'Off-Peak' },
@@ -96,33 +143,14 @@
         ];
         
         const RANK_ALIASES = {
-            'FO': 'First Officer',
-            'TFO': 'Training First Officer',
-            'CAPT': 'Captain',
-            'CAP': 'Captain',
-            'CPT': 'Captain',
-            'CC': 'Check Captain',
-            'STC': 'Senior Training Captain',
-            'TC': 'Training Captain'
+            'FO': 'First Officer', 'TFO': 'Training First Officer',
+            'CAPT': 'Captain', 'CAP': 'Captain', 'CPT': 'Captain',
+            'CC': 'Check Captain', 'STC': 'Senior Training Captain', 'TC': 'Training Captain'
         };
 
         const EBA_CONSTANTS = {
-            ANNUAL_SALARIES: { 
-                'First Officer': 183137.50, 
-                'Captain': 281750.00,
-                'Check Captain': 326830.00,
-                'Senior Training Captain': 318377.50,
-                'Training Captain': 309925.00,
-                'Training First Officer': 211312.50
-            },
-            PRODUCTIVITY_RATES: { 
-                'First Officer': 236.93, 
-                'Captain': 364.50,
-                'Check Captain': 422.82,
-                'Senior Training Captain': 411.89,
-                'Training Captain': 400.95,
-                'Training First Officer': 273.38
-            },
+            ANNUAL_SALARIES: { 'First Officer': 183137.50, 'Captain': 281750.00, 'Check Captain': 326830.00, 'Senior Training Captain': 318377.50, 'Training Captain': 309925.00, 'Training First Officer': 211312.50 },
+            PRODUCTIVITY_RATES: { 'First Officer': 236.93, 'Captain': 364.50, 'Check Captain': 422.82, 'Senior Training Captain': 411.89, 'Training Captain': 400.95, 'Training First Officer': 273.38 },
             ROSTER_PERIOD_DAYS: 28,
             CREDIT_HOUR_TRIGGERS: { 'Peak': 70, 'Off-Peak': 65 },
             VLEARN_CREDIT: 0.75,
@@ -146,11 +174,8 @@
         }
         function hideResultsModal() { document.getElementById('resultsModal').style.display = 'none'; }
         
-        // Add event listener to close modal when clicking outside the content
         document.getElementById('resultsModal').addEventListener('click', function(event) {
-            if (event.target === this) {
-                hideResultsModal();
-            }
+            if (event.target === this) { hideResultsModal(); }
         });
         
         const parseDateFromRoster = (dateStr) => {
