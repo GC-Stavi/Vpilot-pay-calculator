@@ -224,11 +224,12 @@
             return null;
         }
         
-        function calculateBasePayForPeriod(rank) {
+        function calculateBasePayForPeriod(rank, lwopDays = 0) {
             const annualSalary = EBA_CONSTANTS.ANNUAL_SALARIES[rank];
             if (!annualSalary) return 0;
             const dailyRate = annualSalary / 365;
-            return parseFloat((dailyRate * EBA_CONSTANTS.ROSTER_PERIOD_DAYS).toFixed(2));
+            const periodPay = dailyRate * (EBA_CONSTANTS.ROSTER_PERIOD_DAYS - lwopDays);
+            return parseFloat(periodPay.toFixed(2));
         }
         
         function calculateTotalCreditHours(dayObjects) {
@@ -389,8 +390,11 @@
                 resultsOutput.innerHTML = `<p>Error: Unknown roster period for date ${rosterStartDateStr}.</p>`;
                 return;
             }
+            
+            const lwopDays = dayObjects.filter(day => day.duties.some(d => d.duty.toUpperCase() === 'LWOP')).length;
+            const basePayForPeriod = calculateBasePayForPeriod(rank);
+            const lwopDeduction = (basePayForPeriod / 28) * lwopDays;
 
-            const basePay = calculateBasePayForPeriod(rank);
             const totalCredits = calculateTotalCreditHours(dayObjects);
             const hoursOverTrigger = totalCredits - periodInfo.trigger;
 
@@ -414,7 +418,7 @@
                 cancelledCalloutPay = calloutCount * EBA_CONSTANTS.CANCELLED_CALLOUT_HOURS * EBA_CONSTANTS.PRODUCTIVITY_RATES[rank];
             }
 
-            const superableIncome = basePay + productivityPay + allowances.fortnight1.ddo + allowances.fortnight2.ddo + infringementPay + cancelledCalloutPay;
+            const superableIncome = basePayForPeriod - lwopDeduction + productivityPay + allowances.fortnight1.ddo + allowances.fortnight2.ddo + infringementPay + cancelledCalloutPay;
             const superContribution = superableIncome * EBA_CONSTANTS.SUPER_GUARANTEE_RATE;
             
             const fn1_end = new Date(rosterStartDate);
@@ -429,7 +433,7 @@
             const isEstimate = fn2_end >= currentDate;
 
             calculationResults = {
-                rank, basePay, productivityPay, infringementPay, allowances, cancelledCalloutPay, superContribution,
+                rank, basePay: basePayForPeriod, lwopDeduction, productivityPay, infringementPay, allowances, cancelledCalloutPay, superContribution,
                 periodType: periodInfo.type, totalCredits, creditTrigger: periodInfo.trigger,
                 idtaPay: 0,
                 fortnight1DateRange: `${formatDateForDisplay(rosterStartDate)} - ${formatDateForDisplay(fn1_end)}`,
@@ -458,7 +462,7 @@
              const littlePay = (res.basePay / 2) + littlePayAllowances;
 
              const bigPayAllowances = res.allowances.fortnight2.odta + res.allowances.fortnight2.ddo + res.allowances.fortnight2.bneo;
-             const bigPay = (res.basePay / 2) + bigPayAllowances + res.productivityPay + res.infringementPay + res.cancelledCalloutPay;
+             const bigPay = (res.basePay / 2) - res.lwopDeduction + bigPayAllowances + res.productivityPay + res.infringementPay + res.cancelledCalloutPay;
              
              const totalPay = littlePay + bigPay;
 
@@ -475,6 +479,7 @@
                      <div class="pay-fortnight">
                         <h4>Big Pay (${res.fortnight2DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
+                        <p>LWOP Deduction: -$${res.lwopDeduction.toFixed(2)}</p>
                         <p>ODTA${estLabel}: $${res.allowances.fortnight2.odta.toFixed(2)}</p>
                         <p>DDO Worked: $${res.allowances.fortnight2.ddo.toFixed(2)}</p>
                         <p>Cancelled Accom: $${res.allowances.fortnight2.bneo.toFixed(2)}</p>
