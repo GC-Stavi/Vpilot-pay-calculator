@@ -35,6 +35,7 @@
         .pay-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;}
         .pay-fortnight { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; }
         .pay-fortnight h4 { margin-top: 0; font-size: 0.9em; }
+        .pay-fortnight p { margin: 0.5em 0; }
         
         /* Number input for infringements */
         .manual-inputs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em; flex-wrap: wrap; gap: 20px; }
@@ -349,7 +350,6 @@
             const superableIncome = basePay + productivityPay + allowances.fortnight1.ddo + allowances.fortnight2.ddo + infringementPay + cancelledCalloutPay;
             const superContribution = superableIncome * EBA_CONSTANTS.SUPER_GUARANTEE_RATE;
             
-            // Calculate date ranges for display
             const fn1_end = new Date(rosterStartDate);
             fn1_end.setUTCDate(fn1_end.getUTCDate() + 13);
             const fn2_start = new Date(fn1_end);
@@ -389,13 +389,17 @@
                     <div class="pay-fortnight">
                         <h4>Little Pay (${res.fortnight1DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
-                        <p>Allowances: $${littlePayAllowances.toFixed(2)}</p>
+                        <p>ODTA (Est.): $${res.allowances.fortnight1.odta.toFixed(2)}</p>
+                        <p>DDO Worked: $${res.allowances.fortnight1.ddo.toFixed(2)}</p>
+                        <p>Cancelled Accom: $${res.allowances.fortnight1.bneo.toFixed(2)}</p>
                         <p><strong>Total: $${littlePay.toFixed(2)}</strong></p>
                     </div>
                      <div class="pay-fortnight">
                         <h4>Big Pay (${res.fortnight2DateRange})</h4>
                         <p>Half Base Pay: $${(res.basePay / 2).toFixed(2)}</p>
-                        <p>Allowances: $${bigPayAllowances.toFixed(2)}</p>
+                        <p>ODTA (Est.): $${res.allowances.fortnight2.odta.toFixed(2)}</p>
+                        <p>DDO Worked: $${res.allowances.fortnight2.ddo.toFixed(2)}</p>
+                        <p>Cancelled Accom: $${res.allowances.fortnight2.bneo.toFixed(2)}</p>
                         <p>Productivity Pay: $${res.productivityPay.toFixed(2)}</p>
                         <p>DDO Infringement: $${res.infringementPay.toFixed(2)}</p>
                         <p>Cancelled Callout: $${res.cancelledCalloutPay.toFixed(2)}</p>
